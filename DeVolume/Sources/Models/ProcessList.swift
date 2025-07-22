@@ -28,7 +28,7 @@ class ProcessList {
         // lsof -F pn output: lines starting with 'p' (PID) and 'n' (process name)
         var currentPID: Int?
         var currentName: String?
-        for line in output.split(separator: "\\n") {
+        for line in output.components(separatedBy: "\n") {
             if line.hasPrefix("p") {
                 if let pid = Int(line.dropFirst()) {
                     currentPID = pid

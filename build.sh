@@ -2,40 +2,42 @@
 
 set -e
 
+echo "Cleaning previous build..."
+rm -rf build/DeVolume.app build/DeVolume build/DeVolume.zip
+
 # Create build directory
 mkdir -p build
 
-# (App icon will be copied at the end of the script)
+# Compile the application as a GUI app using swiftc
+echo "Compiling DeVolume as a macOS GUI app..."
+swiftc -sdk $(xcrun --show-sdk-path --sdk macosx) \
+    -target arm64-apple-macosx10.13 \
+    -o build/DeVolume \
+    DeVolume/Sources/Models/*.swift \
+    DeVolume/Sources/ViewControllers/*.swift \
+    DeVolume/Sources/AppDelegate.swift \
+    DeVolume/Sources/main.swift \
+    -import-objc-header DeVolume/Sources/DeVolume-Bridging-Header.h
 
-# Build with Swift Package Manager
-echo "Building with Swift Package Manager..."
-swift build
+# Create application bundle structure
+echo "Creating application bundle..."
+mkdir -p build/DeVolume.app/Contents/MacOS
+mkdir -p build/DeVolume.app/Contents/Resources
 
-# If DeVolume.app exists in the project root, use it; otherwise, create a minimal .app bundle from the SPM binary
-if [ -d "DeVolume.app" ]; then
-    echo "Copying DeVolume.app bundle to build/ directory..."
-    rm -rf build/DeVolume.app
-    cp -R DeVolume.app build/
-else
-    # Create a minimal .app bundle from the SPM binary
-    echo "Creating minimal .app bundle from SPM build..."
-    mkdir -p build/DeVolume.app/Contents/MacOS
-    mkdir -p build/DeVolume.app/Contents/Resources
-    cp .build/debug/DeVolume build/DeVolume.app/Contents/MacOS/
-    cp DeVolume/Info.plist build/DeVolume.app/Contents/
-fi
+# Copy the compiled binary
+cp build/DeVolume build/DeVolume.app/Contents/MacOS/DeVolume
 
-# Ensure Info.plist is present in the final bundle
-if [ -f "DeVolume/Info.plist" ]; then
-    echo "Copying Info.plist to final bundle..."
-    cp DeVolume/Info.plist build/DeVolume.app/Contents/
-fi
+# Copy Info.plist
+cp DeVolume/Info.plist build/DeVolume.app/Contents/Info.plist
 
-# Copy app icon if it exists (after bundle is created/copied)
+# Copy app icon if it exists
 if [ -f "DeVolume/Resources/AppIcon.icns" ]; then
-    echo "Adding app icon to final bundle..."
-    mkdir -p build/DeVolume.app/Contents/Resources
     cp DeVolume/Resources/AppIcon.icns build/DeVolume.app/Contents/Resources/
+fi
+
+# Copy entitlements if present
+if [ -f "DeVolume/Resources/DeVolume.entitlements" ]; then
+    cp DeVolume/Resources/DeVolume.entitlements build/DeVolume.app/Contents/Resources/
 fi
 
 echo "Build complete!"
