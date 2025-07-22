@@ -39,3 +39,11 @@ if [ -f "DeVolume/Resources/AppIcon.icns" ]; then
 fi
 
 echo "Build complete!"
+
+# Create a zip archive for GitHub releases
+if [ -f "build/DeVolume.zip" ]; then
+    rm build/DeVolume.zip
+fi
+echo "Zipping build/DeVolume.app to build/DeVolume.zip..."
+zip -r build/DeVolume.zip build/DeVolume.app
+echo "Zip archive created at build/DeVolume.zip"
