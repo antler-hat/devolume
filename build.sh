@@ -5,13 +5,6 @@ set -e
 # Create build directory
 mkdir -p build
 
-
-# Copy executable
-cp build/DeVolume build/DeVolume.app/Contents/MacOS/
-
-# Copy Info.plist
-cp DeVolume/Info.plist build/DeVolume.app/Contents/
-
 # Copy app icon if it exists
 if [ -f "DeVolume/Resources/AppIcon.icns" ]; then
     echo "Adding app icon..."
