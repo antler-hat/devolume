@@ -1,26 +1,10 @@
 #!/bin/bash
 
-# Exit on error
 set -e
 
 # Create build directory
 mkdir -p build
 
-# Compile the application
-echo "Compiling DeVolume..."
-swiftc -sdk $(xcrun --show-sdk-path --sdk macosx) \
-    -target arm64-apple-macosx10.13 \
-    -o build/DeVolume \
-    DeVolume/Sources/Models/*.swift \
-    DeVolume/Sources/ViewControllers/*.swift \
-    DeVolume/Sources/AppDelegate.swift \
-    DeVolume/Sources/main.swift \
-    -import-objc-header DeVolume/Sources/DeVolume-Bridging-Header.h
-
-# Create application bundle structure
-echo "Creating application bundle..."
-mkdir -p build/DeVolume.app/Contents/MacOS
-mkdir -p build/DeVolume.app/Contents/Resources
 
 # Copy executable
 cp build/DeVolume build/DeVolume.app/Contents/MacOS/
@@ -31,13 +15,27 @@ cp DeVolume/Info.plist build/DeVolume.app/Contents/
 # Copy app icon if it exists
 if [ -f "DeVolume/Resources/AppIcon.icns" ]; then
     echo "Adding app icon..."
+    mkdir -p build/DeVolume.app/Contents/Resources
     cp DeVolume/Resources/AppIcon.icns build/DeVolume.app/Contents/Resources/
 fi
 
-# Install to Applications folder
-echo "Installing to Applications folder..."
-mkdir -p ~/Applications
-rm -rf ~/Applications/DeVolume.app
-cp -R build/DeVolume.app ~/Applications/
 
-echo "Build complete! DeVolume.app has been installed to ~/Applications/" 
+# Build with Swift Package Manager
+echo "Building with Swift Package Manager..."
+swift build
+
+# If DeVolume.app exists in the project root, use it; otherwise, create a minimal .app bundle from the SPM binary
+if [ -d "DeVolume.app" ]; then
+    echo "Copying DeVolume.app bundle to build/ directory..."
+    rm -rf build/DeVolume.app
+    cp -R DeVolume.app build/
+else
+    # Create a minimal .app bundle from the SPM binary
+    echo "Creating minimal .app bundle from SPM build..."
+    mkdir -p build/DeVolume.app/Contents/MacOS
+    mkdir -p build/DeVolume.app/Contents/Resources
+    cp .build/debug/DeVolume build/DeVolume.app/Contents/MacOS/
+    cp DeVolume/Info.plist build/DeVolume.app/Contents/
+fi
+
+echo "Build complete!"

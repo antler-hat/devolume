@@ -17,6 +17,9 @@ class ProcessesViewController: NSViewController {
     override func loadView() {
         self.view = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 400))
         setupUI()
+        // Fetch processes using the volume path
+        self.processes = ProcessList.processesUsingVolume(atPath: volume.path)
+        self.tableView.reloadData()
     }
     
     private func setupUI() {
@@ -129,4 +132,4 @@ extension ProcessesViewController: NSTableViewDelegate, NSTableViewDataSource {
         
         return cellView
     }
-} 
+}
