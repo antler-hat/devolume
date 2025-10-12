@@ -15,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.center()
-        window.title = "DeVolume - Eject External Drives"
+        window.title = "DeVolume Ejector"
 
         // Set MainViewController as the root view controller
         window.contentViewController = MainViewController()

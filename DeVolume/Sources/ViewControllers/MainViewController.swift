@@ -10,6 +10,7 @@ class MainViewController: NSViewController {
     private var processesByVolume: [Volume: [ProcessInfo]] = [:]
     private var aggregatedProcesses: [VolumeProcessInfo] = []
     private var tableView: NSTableView!
+    private var scrollView: NSScrollView!
     private var checkboxes: [NSButton] = []
     private var selectAllCheckbox: NSButton!
     private var infoLabel: NSTextField!
@@ -31,23 +32,24 @@ class MainViewController: NSViewController {
         view.addSubview(infoLabel)
 
         // Empty state emoji
-        emptyStateEmoji = NSTextField(labelWithString: "💽")
-        emptyStateEmoji.font = NSFont.systemFont(ofSize: 80)
+        emptyStateEmoji = NSTextField(labelWithString: "✅")
+        emptyStateEmoji.font = NSFont.systemFont(ofSize: 60)
         emptyStateEmoji.alignment = .center
         emptyStateEmoji.isHidden = true
         emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(emptyStateEmoji)
 
         // Empty state text
-        emptyStateText = NSTextField(labelWithString: "No external drives connected")
-        emptyStateText.font = NSFont.systemFont(ofSize: 28, weight: .bold)
+        emptyStateText = NSTextField(
+            labelWithString: "All external USB drives were successfully Ejected!")
+        emptyStateText.font = NSFont.systemFont(ofSize: 18)
         emptyStateText.alignment = .center
         emptyStateText.isHidden = true
         emptyStateText.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(emptyStateText)
 
         // Table view (hidden until needed)
-        let scrollView = NSScrollView()
+        scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .bezelBorder
@@ -86,7 +88,7 @@ class MainViewController: NSViewController {
         tableView.addTableColumn(pidColumn)
 
         scrollView.documentView = tableView
-        tableView.isHidden = true
+        scrollView.isHidden = true
 
         // End/Eject button
         let actionButton = NSButton(
@@ -114,7 +116,8 @@ class MainViewController: NSViewController {
             emptyStateEmoji.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
             // Empty state text centered below emoji
             emptyStateText.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyStateText.topAnchor.constraint(equalTo: emptyStateEmoji.bottomAnchor, constant: 16)
+            emptyStateText.topAnchor.constraint(
+                equalTo: emptyStateEmoji.bottomAnchor, constant: 16),
         ])
     }
 
@@ -158,29 +161,30 @@ class MainViewController: NSViewController {
 
                 // Hide all UI by default
                 self.infoLabel.isHidden = true
-                self.tableView.isHidden = true
+                self.scrollView.isHidden = true
                 if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
                     actionButton.isHidden = true
                 }
                 self.emptyStateEmoji.isHidden = true
                 self.emptyStateText.isHidden = true
 
-                if volumes.isEmpty {
-                    // No external drives at all: show empty state
-                    print("DEBUG: Showing empty state UI (no external drives detected)")
+                if aggregated.isEmpty {
+                    // Show empty state if there are no processes to display
+                    print("DEBUG: Showing empty state UI (no processes to display)")
                     self.emptyStateEmoji.isHidden = false
                     self.emptyStateText.isHidden = false
-                } else if aggregated.isEmpty {
-                    // All external volumes ejected successfully
-                    print("DEBUG: All external volumes ejected successfully UI")
-                    self.infoLabel.stringValue = "All external volumes ejected successfully."
-                    self.infoLabel.isHidden = false
+                    if volumes.isEmpty {
+                        self.emptyStateText.stringValue =
+                            "There are no USB drives connected, so there's nothing to eject"
+                    } else {
+                        self.emptyStateText.stringValue = "All USB drives were ejected successfully"
+                    }
                 } else {
                     print("DEBUG: Showing table UI (processes preventing ejection)")
                     self.infoLabel.stringValue =
                         "Processes are preventing ejection. Select which to end:"
                     self.infoLabel.isHidden = false
-                    self.tableView.isHidden = false
+                    self.scrollView.isHidden = false
                     if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
                         actionButton.isHidden = false
                     }
@@ -213,7 +217,9 @@ class MainViewController: NSViewController {
                     let isRoot = resourceValues.volumeIsRootFileSystem ?? false
                     let volumeName = resourceValues.volumeLocalizedName ?? url.lastPathComponent
 
-                    print("DEBUG: Checking volume: \(volumeName) (\(url.path)), removable: \(isRemovable), ejectable: \(isEjectable), internal: \(isInternal), root: \(isRoot)")
+                    print(
+                        "DEBUG: Checking volume: \(volumeName) (\(url.path)), removable: \(isRemovable), ejectable: \(isEjectable), internal: \(isInternal), root: \(isRoot)"
+                    )
 
                     if isRoot || url.path == "/" {
                         continue
