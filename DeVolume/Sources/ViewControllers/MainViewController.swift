@@ -13,6 +13,9 @@ class MainViewController: NSViewController {
     private var checkboxes: [NSButton] = []
     private var selectAllCheckbox: NSButton!
     private var infoLabel: NSTextField!
+    // Empty state views
+    private var emptyStateEmoji: NSTextField!
+    private var emptyStateText: NSTextField!
 
     override func loadView() {
         self.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
@@ -26,6 +29,22 @@ class MainViewController: NSViewController {
         infoLabel.font = NSFont.systemFont(ofSize: 16, weight: .medium)
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(infoLabel)
+
+        // Empty state emoji
+        emptyStateEmoji = NSTextField(labelWithString: "💽")
+        emptyStateEmoji.font = NSFont.systemFont(ofSize: 80)
+        emptyStateEmoji.alignment = .center
+        emptyStateEmoji.isHidden = true
+        emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(emptyStateEmoji)
+
+        // Empty state text
+        emptyStateText = NSTextField(labelWithString: "No external drives connected")
+        emptyStateText.font = NSFont.systemFont(ofSize: 28, weight: .bold)
+        emptyStateText.alignment = .center
+        emptyStateText.isHidden = true
+        emptyStateText.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(emptyStateText)
 
         // Table view (hidden until needed)
         let scrollView = NSScrollView()
@@ -89,6 +108,13 @@ class MainViewController: NSViewController {
 
             actionButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             actionButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+
+            // Empty state emoji centered
+            emptyStateEmoji.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyStateEmoji.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
+            // Empty state text centered below emoji
+            emptyStateText.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyStateText.topAnchor.constraint(equalTo: emptyStateEmoji.bottomAnchor, constant: 16)
         ])
     }
 
@@ -96,6 +122,7 @@ class MainViewController: NSViewController {
         infoLabel.stringValue = "Scanning external volumes..."
         DispatchQueue.global(qos: .userInitiated).async {
             let volumes = self.enumerateExternalVolumes()
+            print("DEBUG: Volumes detected: \(volumes.map { "\($0.name) (\($0.path))" })")
             var processesByVolume: [Volume: [ProcessInfo]] = [:]
             var volumesToEject: [Volume] = []
 
@@ -125,13 +152,38 @@ class MainViewController: NSViewController {
                 self.allVolumes = volumes
                 self.processesByVolume = processesByVolume
                 self.aggregatedProcesses = aggregated
-                if aggregated.isEmpty {
+
+                print("DEBUG: aggregatedProcesses count: \(aggregated.count)")
+                print("DEBUG: allVolumes count: \(volumes.count)")
+
+                // Hide all UI by default
+                self.infoLabel.isHidden = true
+                self.tableView.isHidden = true
+                if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
+                    actionButton.isHidden = true
+                }
+                self.emptyStateEmoji.isHidden = true
+                self.emptyStateText.isHidden = true
+
+                if volumes.isEmpty {
+                    // No external drives at all: show empty state
+                    print("DEBUG: Showing empty state UI (no external drives detected)")
+                    self.emptyStateEmoji.isHidden = false
+                    self.emptyStateText.isHidden = false
+                } else if aggregated.isEmpty {
+                    // All external volumes ejected successfully
+                    print("DEBUG: All external volumes ejected successfully UI")
                     self.infoLabel.stringValue = "All external volumes ejected successfully."
-                    self.tableView.isHidden = true
+                    self.infoLabel.isHidden = false
                 } else {
+                    print("DEBUG: Showing table UI (processes preventing ejection)")
                     self.infoLabel.stringValue =
                         "Processes are preventing ejection. Select which to end:"
+                    self.infoLabel.isHidden = false
                     self.tableView.isHidden = false
+                    if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
+                        actionButton.isHidden = false
+                    }
                     self.tableView.reloadData()
                 }
             }
@@ -161,6 +213,8 @@ class MainViewController: NSViewController {
                     let isRoot = resourceValues.volumeIsRootFileSystem ?? false
                     let volumeName = resourceValues.volumeLocalizedName ?? url.lastPathComponent
 
+                    print("DEBUG: Checking volume: \(volumeName) (\(url.path)), removable: \(isRemovable), ejectable: \(isEjectable), internal: \(isInternal), root: \(isRoot)")
+
                     if isRoot || url.path == "/" {
                         continue
                     }
@@ -182,6 +236,7 @@ class MainViewController: NSViewController {
                 }
             }
         }
+        print("DEBUG: enumerateExternalVolumes() returning \(result.count) volumes")
         return result
     }
 
