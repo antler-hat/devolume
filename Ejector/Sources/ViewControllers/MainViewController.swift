@@ -39,15 +39,17 @@ class MainViewController: NSViewController {
         emptyStateEmoji.alignment = .center
         emptyStateEmoji.isHidden = true
         emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateEmoji.wantsLayer = true
         view.addSubview(emptyStateEmoji)
 
         // Empty state text
         emptyStateText = NSTextField(
-            labelWithString: "All external USB drives were successfully Ejected!")
+            labelWithString: "All USB drives ejected!")
         emptyStateText.font = NSFont.systemFont(ofSize: 18)
         emptyStateText.alignment = .center
         emptyStateText.isHidden = true
         emptyStateText.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateText.wantsLayer = true
         view.addSubview(emptyStateText)
 
         // Spinner (centered, hidden by default)
@@ -197,7 +199,7 @@ class MainViewController: NSViewController {
                     }
                     NSAnimationContext.runAnimationGroup(
                         { context in
-                            context.duration = 2
+                            context.duration = 0.4
                             self.emptyStateEmoji.animator().alphaValue = 1
                             self.emptyStateText.animator().alphaValue = 1
                         }, completionHandler: nil)
