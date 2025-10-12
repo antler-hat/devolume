@@ -17,6 +17,8 @@ class MainViewController: NSViewController {
     // Empty state views
     private var emptyStateEmoji: NSTextField!
     private var emptyStateText: NSTextField!
+    // Spinner
+    private var spinner: NSProgressIndicator!
 
     override func loadView() {
         self.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
@@ -47,6 +49,15 @@ class MainViewController: NSViewController {
         emptyStateText.isHidden = true
         emptyStateText.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(emptyStateText)
+
+        // Spinner (centered, hidden by default)
+        spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .regular
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.isDisplayedWhenStopped = false
+        spinner.isHidden = true
+        view.addSubview(spinner)
 
         // Table view (hidden until needed)
         scrollView = NSScrollView()
@@ -118,11 +129,26 @@ class MainViewController: NSViewController {
             emptyStateText.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             emptyStateText.topAnchor.constraint(
                 equalTo: emptyStateEmoji.bottomAnchor, constant: 16),
+            // Spinner centered
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
     }
 
     private func startVolumeScanAndEject() {
         infoLabel.stringValue = "Scanning external volumes..."
+
+        // Show spinner, hide all other UI
+        self.spinner.isHidden = false
+        self.spinner.startAnimation(nil)
+        self.infoLabel.isHidden = true
+        self.scrollView.isHidden = true
+        if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
+            actionButton.isHidden = true
+        }
+        self.emptyStateEmoji.isHidden = true
+        self.emptyStateText.isHidden = true
+
         DispatchQueue.global(qos: .userInitiated).async {
             let volumes = self.enumerateExternalVolumes()
             print("DEBUG: Volumes detected: \(volumes.map { "\($0.name) (\($0.path))" })")
@@ -156,29 +182,26 @@ class MainViewController: NSViewController {
                 self.processesByVolume = processesByVolume
                 self.aggregatedProcesses = aggregated
 
-                print("DEBUG: aggregatedProcesses count: \(aggregated.count)")
-                print("DEBUG: allVolumes count: \(volumes.count)")
-
-                // Hide all UI by default
-                self.infoLabel.isHidden = true
-                self.scrollView.isHidden = true
-                if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
-                    actionButton.isHidden = true
-                }
-                self.emptyStateEmoji.isHidden = true
-                self.emptyStateText.isHidden = true
+                // Hide spinner
+                self.spinner.stopAnimation(nil)
+                self.spinner.isHidden = true
 
                 if aggregated.isEmpty {
-                    // Show empty state if there are no processes to display
-                    print("DEBUG: Showing empty state UI (no processes to display)")
+                    // Show empty state with fade-in animation
+                    self.emptyStateEmoji.alphaValue = 0
+                    self.emptyStateText.alphaValue = 0
                     self.emptyStateEmoji.isHidden = false
                     self.emptyStateText.isHidden = false
                     if volumes.isEmpty {
-                        self.emptyStateText.stringValue =
-                            "All USB drives ejected!"
+                        self.emptyStateText.stringValue = "All USB drives ejected!"
                     }
+                    NSAnimationContext.runAnimationGroup(
+                        { context in
+                            context.duration = 2
+                            self.emptyStateEmoji.animator().alphaValue = 1
+                            self.emptyStateText.animator().alphaValue = 1
+                        }, completionHandler: nil)
                 } else {
-                    print("DEBUG: Showing table UI (processes preventing ejection)")
                     self.infoLabel.stringValue =
                         "Processes are preventing ejection. Select which to end:"
                     self.infoLabel.isHidden = false
