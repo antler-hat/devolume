@@ -15,10 +15,11 @@ let package = Package(
             name: "DeVolume",
             dependencies: [],
             path: "DeVolume",
+            exclude: ["Info.plist"],
             sources: ["Sources"],
             resources: [
                 .copy("Resources")
             ]
         )
     ]
-) 
+)

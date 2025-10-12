@@ -1,32 +1,40 @@
 #!/bin/bash
 
-# Exit on error
 set -e
 
-# Create build directory
-mkdir -p build
+APP_NAME="DeVolume"
+BUILD_DIR="build"
+APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
+MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
+RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
+PLIST_SRC="DeVolume/Info.plist"
+PLIST_DEST="$APP_BUNDLE/Contents/Info.plist"
 
-# Compile the application
-echo "Compiling DeVolume..."
-swiftc -sdk $(xcrun --show-sdk-path --sdk macosx) \
-    -target arm64-apple-macosx10.13 \
-    -o build/DeVolume \
-    DeVolume/Sources/DeVolume.swift
+echo "Cleaning previous build..."
+rm -rf "$BUILD_DIR"
+rm -rf ".build"
 
-# Create application bundle structure
-echo "Creating application bundle..."
-mkdir -p build/DeVolume.app/Contents/MacOS
-mkdir -p build/DeVolume.app/Contents/Resources
+echo "Building with Swift Package Manager..."
+swift build -c release
 
-# Copy executable
-cp build/DeVolume build/DeVolume.app/Contents/MacOS/
+echo "Creating .app bundle structure..."
+mkdir -p "$MACOS_DIR"
+mkdir -p "$RESOURCES_DIR"
 
-# Copy Info.plist
-cp DeVolume/Info.plist build/DeVolume.app/Contents/
+echo "Copying executable..."
+cp ".build/release/$APP_NAME" "$MACOS_DIR/"
 
-# Install to Applications folder
-echo "Installing to Applications folder..."
-rm -rf ~/Applications/DeVolume.app
-cp -R build/DeVolume.app ~/Applications/
+echo "Copying Info.plist..."
+cp "$PLIST_SRC" "$PLIST_DEST"
 
-echo "Build complete! DeVolume.app has been installed to ~/Applications/" 
+# Copy resources if any exist
+if [ -d "DeVolume/Resources" ]; then
+    echo "Copying resources..."
+    cp -R DeVolume/Resources/* "$RESOURCES_DIR/" 2>/dev/null || true
+fi
+
+echo "Installing to ~/Applications..."
+rm -rf ~/Applications/$APP_NAME.app
+cp -R "$APP_BUNDLE" ~/Applications/
+
+echo "Build complete! $APP_NAME.app has been installed to ~/Applications/"
