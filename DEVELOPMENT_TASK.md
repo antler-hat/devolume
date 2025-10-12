@@ -1,8 +1,8 @@
-# Task: Refactor DeVolume App for External Drive Ejection
+# Task: Refactor Ejector App for External Drive Ejection
 
 ## Description
 
-The goal of this task is to refocus the DeVolume app to specifically solve the problem of safely ejecting external drives. The app should, when run, attempt to eject all external volumes that do not have any processes using them. If there are processes using any external volume, the app should present a unified interface listing all such processes (across all volumes) in a single table, allowing the user to end those processes and then eject the drives. The UI and logic should be updated to streamline this workflow and provide clear feedback to the user.
+The goal of this task is to refocus the Ejector app to specifically solve the problem of safely ejecting external drives. The app should, when run, attempt to eject all external volumes that do not have any processes using them. If there are processes using any external volume, the app should present a unified interface listing all such processes (across all volumes) in a single table, allowing the user to end those processes and then eject the drives. The UI and logic should be updated to streamline this workflow and provide clear feedback to the user.
 
 ## Task List
 

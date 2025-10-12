@@ -1,6 +1,6 @@
-# DeVolume
+# Ejector
 
-DeVolume is a macOS application that helps you manage processes using external volumes. It allows you to identify and terminate processes that are preventing you from ejecting external drives.
+Ejector is a macOS application that helps you manage processes using external volumes. It allows you to identify and terminate processes that are preventing you from ejecting external drives.
 
 ## Features
 
@@ -17,8 +17,8 @@ DeVolume is a macOS application that helps you manage processes using external v
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/devolume.git
-   cd devolume
+   git clone https://github.com/yourusername/ejector.git
+   cd ejector
    ```
 
 2. Build the application:
@@ -27,11 +27,11 @@ DeVolume is a macOS application that helps you manage processes using external v
    ./build.sh
    ```
 
-3. The application will be installed to `~/Applications/DeVolume.app`
+3. The application will be installed to `~/Applications/Ejector.app`
 
 ## Usage
 
-1. Launch DeVolume from your Applications folder
+1. Launch Ejector from your Applications folder
 2. Select an external volume from the list
 3. View the processes that are using the volume
 4. Select the processes you want to terminate
@@ -55,4 +55,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - Apple's Cocoa framework
-- The Swift programming language 
+- The Swift programming language

@@ -15,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.center()
-        window.title = "DeVolume Ejector"
+        window.title = "Ejector"
 
         // Set MainViewController as the root view controller
         window.contentViewController = MainViewController()

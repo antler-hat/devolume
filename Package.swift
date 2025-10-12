@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "DeVolume",
+    name: "Ejector",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "DeVolume", targets: ["DeVolume"])
+        .executable(name: "Ejector", targets: ["Ejector"])
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "DeVolume",
+            name: "Ejector",
             dependencies: [],
-            path: "DeVolume",
+            path: "Ejector",
             exclude: ["Info.plist"],
             sources: ["Sources"],
             resources: [
