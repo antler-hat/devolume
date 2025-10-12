@@ -175,9 +175,7 @@ class MainViewController: NSViewController {
                     self.emptyStateText.isHidden = false
                     if volumes.isEmpty {
                         self.emptyStateText.stringValue =
-                            "There are no USB drives connected, so there's nothing to eject"
-                    } else {
-                        self.emptyStateText.stringValue = "All USB drives were ejected successfully"
+                            "No USB drives connected to eject"
                     }
                 } else {
                     print("DEBUG: Showing table UI (processes preventing ejection)")
