@@ -189,20 +189,11 @@ class MainViewController: NSViewController {
                 self.spinner.isHidden = true
 
                 if aggregated.isEmpty {
-                    // Show empty state with fade-in animation
-                    self.emptyStateEmoji.alphaValue = 0
-                    self.emptyStateText.alphaValue = 0
                     self.emptyStateEmoji.isHidden = false
                     self.emptyStateText.isHidden = false
                     if volumes.isEmpty {
                         self.emptyStateText.stringValue = "All USB drives ejected!"
                     }
-                    NSAnimationContext.runAnimationGroup(
-                        { context in
-                            context.duration = 0.4
-                            self.emptyStateEmoji.animator().alphaValue = 1
-                            self.emptyStateText.animator().alphaValue = 1
-                        }, completionHandler: nil)
                 } else {
                     self.infoLabel.stringValue =
                         "Processes are preventing ejection. Select which to end:"
