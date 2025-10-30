@@ -44,7 +44,7 @@ class MainViewController: NSViewController {
     private var closeButton: NSButton!
 
     override func loadView() {
-        self.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
+        self.view = NSView()
         setupUI()
         showScanningState()
         scanForVolumes()
@@ -905,7 +905,7 @@ extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if tableView === volumeTableView {
-            return 36
+            return 48
         } else if tableView === processTableView {
             return 32
         }
