@@ -6,206 +6,613 @@ struct VolumeProcessInfo {
 }
 
 class MainViewController: NSViewController {
+    private enum ContentState {
+        case scanning
+        case noVolumes
+        case volumeSelection
+        case processResolution
+        case completion
+    }
+
+    private var contentState: ContentState = .scanning
+
     private var allVolumes: [Volume] = []
-    private var processesByVolume: [Volume: [ProcessInfo]] = [:]
+    private var selectedVolumes: Set<Volume> = []
+    private var volumesPendingEjection: Set<Volume> = []
     private var aggregatedProcesses: [VolumeProcessInfo] = []
-    private var tableView: NSTableView!
-    private var scrollView: NSScrollView!
-    private var checkboxes: [NSButton] = []
-    private var selectAllCheckbox: NSButton!
+    private var selectedProcessIndexes: Set<Int> = []
+
+    private var volumeCheckboxes: [Int: NSButton] = [:]
+    private var processCheckboxes: [Int: NSButton] = [:]
+
     private var infoLabel: NSTextField!
-    // Empty state views
+    private var spinner: NSProgressIndicator!
     private var emptyStateEmoji: NSTextField!
     private var emptyStateText: NSTextField!
-    // Spinner
-    private var spinner: NSProgressIndicator!
+
+    private var volumeScrollView: NSScrollView!
+    private var volumeTableView: NSTableView!
+    private var volumeSelectAllCheckbox: NSButton!
+
+    private var processScrollView: NSScrollView!
+    private var processTableView: NSTableView!
+    private var processSelectAllCheckbox: NSButton!
+
+    private var ejectButton: NSButton!
+    private var endProcessesButton: NSButton!
+    private var closeButton: NSButton!
 
     override func loadView() {
         self.view = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 500))
         setupUI()
-        startVolumeScanAndEject()
+        showScanningState()
+        scanForVolumes()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        positionHeaderCheckboxes()
     }
 
     private func setupUI() {
-        // Info label
         infoLabel = NSTextField(labelWithString: "Scanning external volumes...")
         infoLabel.font = NSFont.systemFont(ofSize: 16, weight: .medium)
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(infoLabel)
 
-        // Empty state emoji
         emptyStateEmoji = NSTextField(labelWithString: "✅")
         emptyStateEmoji.font = NSFont.systemFont(ofSize: 60)
         emptyStateEmoji.alignment = .center
-        emptyStateEmoji.isHidden = true
         emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateEmoji.wantsLayer = true
+        emptyStateEmoji.isHidden = true
         view.addSubview(emptyStateEmoji)
 
-        // Empty state text
-        emptyStateText = NSTextField(
-            labelWithString: "All USB drives ejected!")
+        emptyStateText = NSTextField(labelWithString: "")
         emptyStateText.font = NSFont.systemFont(ofSize: 18)
         emptyStateText.alignment = .center
-        emptyStateText.isHidden = true
         emptyStateText.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateText.wantsLayer = true
+        emptyStateText.isHidden = true
         view.addSubview(emptyStateText)
 
-        // Spinner (centered, hidden by default)
         spinner = NSProgressIndicator()
         spinner.style = .spinning
         spinner.controlSize = .regular
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.isDisplayedWhenStopped = false
-        spinner.isHidden = true
         view.addSubview(spinner)
 
-        // Table view (hidden until needed)
-        scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
-        view.addSubview(scrollView)
+        volumeScrollView = NSScrollView()
+        volumeScrollView.translatesAutoresizingMaskIntoConstraints = false
+        volumeScrollView.hasVerticalScroller = true
+        volumeScrollView.borderType = .bezelBorder
+        volumeScrollView.isHidden = true
+        view.addSubview(volumeScrollView)
 
-        tableView = NSTableView()
-        tableView.delegate = self
-        tableView.dataSource = self
+        volumeTableView = NSTableView()
+        volumeTableView.delegate = self
+        volumeTableView.dataSource = self
 
-        // Checkbox column
-        selectAllCheckbox = NSButton(
-            checkboxWithTitle: "", target: self, action: #selector(selectAllClicked))
-        selectAllCheckbox.state = .on
-        let checkColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("CheckColumn"))
-        checkColumn.headerCell = NSTableHeaderCell()
-        checkColumn.headerCell.title = ""
-        checkColumn.width = 30
-        tableView.addTableColumn(checkColumn)
+        let volumeCheckColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("VolumeCheckColumn"))
+        volumeCheckColumn.width = 30
+        let volumeHeaderCell = NSTableHeaderCell()
+        volumeHeaderCell.title = ""
+        volumeCheckColumn.headerCell = volumeHeaderCell
+        volumeTableView.addTableColumn(volumeCheckColumn)
 
-        // Volume column
-        let volumeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("VolumeColumn"))
-        volumeColumn.title = "Volume"
-        volumeColumn.width = 180
-        tableView.addTableColumn(volumeColumn)
+        let volumeNameColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("VolumeNameColumn"))
+        volumeNameColumn.title = "Drive"
+        volumeNameColumn.width = 450
+        volumeTableView.addTableColumn(volumeNameColumn)
 
-        // Process name column
-        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("NameColumn"))
-        nameColumn.title = "Process Name"
-        nameColumn.width = 200
-        tableView.addTableColumn(nameColumn)
+        volumeScrollView.documentView = volumeTableView
 
-        // PID column
-        let pidColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("PIDColumn"))
-        pidColumn.title = "PID"
-        pidColumn.width = 80
-        tableView.addTableColumn(pidColumn)
+        volumeSelectAllCheckbox = NSButton(
+            checkboxWithTitle: "", target: self, action: #selector(volumeSelectAllClicked))
+        volumeSelectAllCheckbox.allowsMixedState = true
 
-        scrollView.documentView = tableView
-        scrollView.isHidden = true
+        processScrollView = NSScrollView()
+        processScrollView.translatesAutoresizingMaskIntoConstraints = false
+        processScrollView.hasVerticalScroller = true
+        processScrollView.borderType = .bezelBorder
+        processScrollView.isHidden = true
+        view.addSubview(processScrollView)
 
-        // End/Eject button
-        let actionButton = NSButton(
-            title: "End processes and eject", target: self, action: #selector(actionButtonClicked))
-        actionButton.translatesAutoresizingMaskIntoConstraints = false
-        actionButton.bezelStyle = .rounded
-        actionButton.contentTintColor = NSColor.systemRed
-        view.addSubview(actionButton)
+        processTableView = NSTableView()
+        processTableView.delegate = self
+        processTableView.dataSource = self
 
-        // Constraints
+        let processCheckColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessCheckColumn"))
+        processCheckColumn.width = 30
+        let processHeaderCell = NSTableHeaderCell()
+        processHeaderCell.title = ""
+        processCheckColumn.headerCell = processHeaderCell
+        processTableView.addTableColumn(processCheckColumn)
+
+        let processVolumeColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessVolumeColumn"))
+        processVolumeColumn.title = "Drive"
+        processVolumeColumn.width = 180
+        processTableView.addTableColumn(processVolumeColumn)
+
+        let processNameColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessNameColumn"))
+        processNameColumn.title = "Process Name"
+        processNameColumn.width = 240
+        processTableView.addTableColumn(processNameColumn)
+
+        let processPIDColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessPIDColumn"))
+        processPIDColumn.title = "PID"
+        processPIDColumn.width = 80
+        processTableView.addTableColumn(processPIDColumn)
+
+        processScrollView.documentView = processTableView
+
+        processSelectAllCheckbox = NSButton(
+            checkboxWithTitle: "", target: self, action: #selector(processSelectAllClicked))
+        processSelectAllCheckbox.allowsMixedState = true
+
+        ejectButton = NSButton(
+            title: "Eject Drives", target: self, action: #selector(ejectButtonClicked))
+        ejectButton.translatesAutoresizingMaskIntoConstraints = false
+        ejectButton.bezelStyle = .rounded
+        ejectButton.contentTintColor = NSColor.systemRed
+        ejectButton.isHidden = true
+        view.addSubview(ejectButton)
+
+        endProcessesButton = NSButton(
+            title: "End processes", target: self, action: #selector(endProcessesButtonClicked))
+        endProcessesButton.translatesAutoresizingMaskIntoConstraints = false
+        endProcessesButton.bezelStyle = .rounded
+        endProcessesButton.contentTintColor = NSColor.systemRed
+        endProcessesButton.isHidden = true
+        view.addSubview(endProcessesButton)
+
+        closeButton = NSButton(title: "Close", target: self, action: #selector(closeButtonClicked))
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.bezelStyle = .rounded
+        closeButton.keyEquivalent = "\r"
+        closeButton.isHidden = true
+        view.addSubview(closeButton)
+
         NSLayoutConstraint.activate([
             infoLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
             infoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
-            scrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 20),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            scrollView.bottomAnchor.constraint(equalTo: actionButton.topAnchor, constant: -20),
+            volumeScrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 20),
+            volumeScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            volumeScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            volumeScrollView.bottomAnchor.constraint(equalTo: ejectButton.topAnchor, constant: -20),
 
-            actionButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            actionButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+            processScrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 20),
+            processScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            processScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            processScrollView.bottomAnchor.constraint(
+                equalTo: endProcessesButton.topAnchor, constant: -20),
 
-            // Empty state emoji centered
+            ejectButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            ejectButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+
+            endProcessesButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            endProcessesButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+
+            closeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            closeButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+
             emptyStateEmoji.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             emptyStateEmoji.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
-            // Empty state text centered below emoji
+
             emptyStateText.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyStateText.topAnchor.constraint(
-                equalTo: emptyStateEmoji.bottomAnchor, constant: 16),
-            // Spinner centered
+            emptyStateText.topAnchor.constraint(equalTo: emptyStateEmoji.bottomAnchor, constant: 16),
+
             spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
     }
 
-    private func startVolumeScanAndEject() {
+    private func showScanningState() {
+        contentState = .scanning
         infoLabel.stringValue = "Scanning external volumes..."
+        infoLabel.isHidden = false
+        spinner.isHidden = false
+        spinner.startAnimation(nil)
 
-        // Show spinner, hide all other UI
-        self.spinner.isHidden = false
-        self.spinner.startAnimation(nil)
-        self.infoLabel.isHidden = true
-        self.scrollView.isHidden = true
-        if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
-            actionButton.isHidden = true
-        }
-        self.emptyStateEmoji.isHidden = true
-        self.emptyStateText.isHidden = true
+        volumeScrollView.isHidden = true
+        processScrollView.isHidden = true
+        ejectButton.isHidden = true
+        endProcessesButton.isHidden = true
+        closeButton.isHidden = true
+        emptyStateEmoji.isHidden = true
+        emptyStateText.isHidden = true
+    }
 
+    private func scanForVolumes() {
         DispatchQueue.global(qos: .userInitiated).async {
             let volumes = self.enumerateExternalVolumes()
-            print("DEBUG: Volumes detected: \(volumes.map { "\($0.name) (\($0.path))" })")
-            var processesByVolume: [Volume: [ProcessInfo]] = [:]
-            var volumesToEject: [Volume] = []
+            DispatchQueue.main.async {
+                self.handleVolumeScanResult(volumes)
+            }
+        }
+    }
+
+    private func handleVolumeScanResult(_ volumes: [Volume]) {
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
+
+        let sortedVolumes = volumes.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        allVolumes = sortedVolumes
+
+        guard !sortedVolumes.isEmpty else {
+            showNoVolumesState()
+            return
+        }
+
+        selectedVolumes = Set(sortedVolumes)
+        volumeCheckboxes.removeAll()
+        volumeTableView.reloadData()
+
+        updateVolumeSelectAllState()
+        updateEjectButtonState()
+        showVolumeSelectionState()
+    }
+
+    private func showNoVolumesState() {
+        showCompletionState(message: "No external drives are mounted. Nothing to eject")
+        contentState = .noVolumes
+    }
+
+    private func showVolumeSelectionState() {
+        contentState = .volumeSelection
+        infoLabel.stringValue = "Select the drives to eject:"
+
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
+        emptyStateEmoji.isHidden = true
+        emptyStateText.isHidden = true
+        processScrollView.isHidden = true
+        endProcessesButton.isHidden = true
+        closeButton.isHidden = true
+
+        volumeScrollView.isHidden = false
+        ejectButton.isHidden = false
+        updateEjectButtonState()
+    }
+
+    private func showProcessResolutionState() {
+        contentState = .processResolution
+        infoLabel.stringValue =
+            "Processes are preventing ejection. Select which to end:"
+
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
+        volumeScrollView.isHidden = true
+        ejectButton.isHidden = true
+        emptyStateEmoji.isHidden = true
+        emptyStateText.isHidden = true
+        closeButton.isHidden = true
+
+        processScrollView.isHidden = false
+        endProcessesButton.isHidden = false
+        updateProcessSelectAllState()
+    }
+
+    private func showCompletionState(message: String, emoji: String = "✅") {
+        contentState = .completion
+        emptyStateEmoji.stringValue = emoji
+        emptyStateText.stringValue = message
+
+        infoLabel.isHidden = true
+        spinner.stopAnimation(nil)
+        spinner.isHidden = true
+        volumeScrollView.isHidden = true
+        processScrollView.isHidden = true
+        ejectButton.isHidden = true
+        endProcessesButton.isHidden = true
+
+        emptyStateEmoji.isHidden = false
+        emptyStateText.isHidden = false
+        closeButton.isHidden = false
+        focusCloseButton()
+    }
+
+    private func showProgressState(message: String) {
+        infoLabel.stringValue = message
+        infoLabel.isHidden = false
+        spinner.isHidden = false
+        spinner.startAnimation(nil)
+
+        volumeScrollView.isHidden = true
+        processScrollView.isHidden = true
+        ejectButton.isHidden = true
+        endProcessesButton.isHidden = true
+        closeButton.isHidden = true
+        emptyStateEmoji.isHidden = true
+        emptyStateText.isHidden = true
+    }
+
+    private func focusCloseButton() {
+        guard let window = view.window else {
+            DispatchQueue.main.async { [weak self] in
+                self?.focusCloseButton()
+            }
+            return
+        }
+
+        window.makeFirstResponder(closeButton)
+        if let cell = closeButton.cell as? NSButtonCell {
+            window.defaultButtonCell = cell
+        }
+    }
+
+    private func positionHeaderCheckboxes() {
+        if let headerView = volumeTableView.headerView {
+            let height = headerView.frame.height
+            let size: CGFloat = 18
+            let y = (height - size) / 2.0
+            volumeSelectAllCheckbox.frame = NSRect(x: 6, y: y, width: size, height: size)
+            if volumeSelectAllCheckbox.superview !== headerView {
+                headerView.addSubview(volumeSelectAllCheckbox)
+            }
+        }
+
+        if let headerView = processTableView.headerView {
+            let height = headerView.frame.height
+            let size: CGFloat = 18
+            let y = (height - size) / 2.0
+            processSelectAllCheckbox.frame = NSRect(x: 6, y: y, width: size, height: size)
+            if processSelectAllCheckbox.superview !== headerView {
+                headerView.addSubview(processSelectAllCheckbox)
+            }
+        }
+    }
+
+    @objc private func volumeSelectAllClicked() {
+        var newState = volumeSelectAllCheckbox.state
+        if newState == .mixed {
+            newState = .on
+            volumeSelectAllCheckbox.state = newState
+        }
+        if newState == .on {
+            selectedVolumes = Set(allVolumes)
+        } else {
+            selectedVolumes.removeAll()
+        }
+        for checkbox in volumeCheckboxes.values {
+            checkbox.state = newState
+        }
+        updateVolumeSelectAllState()
+        updateEjectButtonState()
+    }
+
+    @objc private func processSelectAllClicked() {
+        var newState = processSelectAllCheckbox.state
+        if newState == .mixed {
+            newState = .on
+            processSelectAllCheckbox.state = newState
+        }
+        if newState == .on {
+            selectedProcessIndexes = Set(0..<aggregatedProcesses.count)
+        } else {
+            selectedProcessIndexes.removeAll()
+        }
+        for checkbox in processCheckboxes.values {
+            checkbox.state = newState
+        }
+        updateProcessSelectAllState()
+    }
+
+    @objc private func volumeCheckboxToggled(_ sender: NSButton) {
+        let row = sender.tag
+        guard row >= 0 && row < allVolumes.count else { return }
+        let volume = allVolumes[row]
+        if sender.state == .on {
+            selectedVolumes.insert(volume)
+        } else {
+            selectedVolumes.remove(volume)
+        }
+        volumeCheckboxes[row] = sender
+        updateVolumeSelectAllState()
+        updateEjectButtonState()
+    }
+
+    @objc private func processCheckboxToggled(_ sender: NSButton) {
+        let row = sender.tag
+        guard row >= 0 && row < aggregatedProcesses.count else { return }
+        if sender.state == .on {
+            selectedProcessIndexes.insert(row)
+        } else {
+            selectedProcessIndexes.remove(row)
+        }
+        processCheckboxes[row] = sender
+        updateProcessSelectAllState()
+    }
+
+    @objc private func ejectButtonClicked() {
+        let volumesToEject = allVolumes.filter { selectedVolumes.contains($0) }
+        guard !volumesToEject.isEmpty else { return }
+        attemptEject(volumes: volumesToEject)
+    }
+
+    @objc private func endProcessesButtonClicked() {
+        guard !selectedProcessIndexes.isEmpty else { return }
+        let selectedInfos = selectedProcessIndexes
+            .compactMap { index -> VolumeProcessInfo? in
+                guard index >= 0 && index < aggregatedProcesses.count else { return nil }
+                return aggregatedProcesses[index]
+            }
+
+        guard !selectedInfos.isEmpty else { return }
+
+        let uniqueProcesses = selectedInfos.reduce(into: [Int: ProcessInfo]()) { partialResult, info in
+            partialResult[info.process.pid] = info.process
+        }.map { $0.value }
+
+        showProgressState(message: "Ending selected processes...")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.terminate(processes: uniqueProcesses)
+            let volumesToCheck = Array(self.volumesPendingEjection)
+            var updatedBlocking: [Volume: [ProcessInfo]] = [:]
+            for volume in volumesToCheck {
+                let processes = self.findProcessesUsingVolume(volume)
+                if !processes.isEmpty {
+                    updatedBlocking[volume] = processes
+                }
+            }
+            DispatchQueue.main.async {
+                if updatedBlocking.isEmpty {
+                    guard !volumesToCheck.isEmpty else {
+                        self.showCompletionState(message: "All selected drives were ejected.")
+                        return
+                    }
+                    self.attemptEject(volumes: volumesToCheck)
+                } else {
+                    self.refreshProcessList(with: updatedBlocking)
+                }
+            }
+        }
+    }
+
+    private func updateVolumeSelectAllState() {
+        guard !allVolumes.isEmpty else {
+            volumeSelectAllCheckbox.state = .off
+            volumeSelectAllCheckbox.isEnabled = false
+            return
+        }
+        volumeSelectAllCheckbox.isEnabled = true
+
+        if selectedVolumes.count == allVolumes.count {
+            volumeSelectAllCheckbox.state = .on
+        } else if selectedVolumes.isEmpty {
+            volumeSelectAllCheckbox.state = .off
+        } else {
+            volumeSelectAllCheckbox.state = .mixed
+        }
+    }
+
+    private func updateProcessSelectAllState() {
+        let total = aggregatedProcesses.count
+        guard total > 0 else {
+            processSelectAllCheckbox.state = .off
+            processSelectAllCheckbox.isEnabled = false
+            return
+        }
+        processSelectAllCheckbox.isEnabled = true
+        if selectedProcessIndexes.count == total {
+            processSelectAllCheckbox.state = .on
+        } else if selectedProcessIndexes.isEmpty {
+            processSelectAllCheckbox.state = .off
+        } else {
+            processSelectAllCheckbox.state = .mixed
+        }
+    }
+
+    private func updateEjectButtonState() {
+        ejectButton.isEnabled = !selectedVolumes.isEmpty
+    }
+
+    private func attemptEject(volumes: [Volume]) {
+        volumesPendingEjection = Set(volumes)
+        showProgressState(message: "Ejecting selected drives...")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var successful: [Volume] = []
+            var blocking: [Volume: [ProcessInfo]] = [:]
+            var failedWithoutProcesses: [Volume] = []
 
             for volume in volumes {
                 let processes = self.findProcessesUsingVolume(volume)
-                if processes.isEmpty {
-                    volumesToEject.append(volume)
-                } else {
-                    processesByVolume[volume] = processes
+                if !processes.isEmpty {
+                    blocking[volume] = processes
+                    continue
                 }
-            }
 
-            // Eject volumes with no processes
-            for volume in volumesToEject {
-                self.ejectVolume(volume)
-            }
-
-            // Aggregate processes for UI
-            var aggregated: [VolumeProcessInfo] = []
-            for (volume, processes) in processesByVolume {
-                for process in processes {
-                    aggregated.append(VolumeProcessInfo(volume: volume, process: process))
+                if self.ejectVolume(volume) {
+                    successful.append(volume)
+                } else {
+                    failedWithoutProcesses.append(volume)
                 }
             }
 
             DispatchQueue.main.async {
-                self.allVolumes = volumes
-                self.processesByVolume = processesByVolume
-                self.aggregatedProcesses = aggregated
-
-                // Hide spinner
-                self.spinner.stopAnimation(nil)
-                self.spinner.isHidden = true
-
-                if aggregated.isEmpty {
-                    self.emptyStateEmoji.isHidden = false
-                    self.emptyStateText.isHidden = false
-                    if volumes.isEmpty {
-                        self.emptyStateText.stringValue = "All USB drives ejected!"
-                    }
-                } else {
-                    self.infoLabel.stringValue =
-                        "Processes are preventing ejection. Select which to end:"
-                    self.infoLabel.isHidden = false
-                    self.scrollView.isHidden = false
-                    if let actionButton = self.view.subviews.compactMap({ $0 as? NSButton }).last {
-                        actionButton.isHidden = false
-                    }
-                    self.tableView.reloadData()
-                }
+                self.handleEjectResult(
+                    successful: successful,
+                    blocking: blocking,
+                    failedWithoutProcesses: failedWithoutProcesses
+                )
             }
         }
+    }
+
+    private func handleEjectResult(
+        successful: [Volume], blocking: [Volume: [ProcessInfo]], failedWithoutProcesses: [Volume]
+    ) {
+        let successfulSet = Set(successful)
+        if !successfulSet.isEmpty {
+            allVolumes.removeAll { successfulSet.contains($0) }
+            selectedVolumes.subtract(successfulSet)
+        }
+
+        if blocking.isEmpty {
+            volumesPendingEjection.removeAll()
+            if failedWithoutProcesses.isEmpty {
+                showCompletionState(message: "All selected drives were ejected.")
+            } else {
+                let names = failedWithoutProcesses.map { $0.name }.sorted()
+                let joined = names.joined(separator: ", ")
+                let message: String
+                if names.count == 1 {
+                    message =
+                        "Unable to eject \(joined). Close any apps using it and try again."
+                } else {
+                    message =
+                        "Unable to eject: \(joined). Close any apps using them and try again."
+                }
+                showCompletionState(message: message, emoji: "⚠️")
+            }
+            return
+        }
+
+        volumesPendingEjection = Set(blocking.keys)
+        refreshProcessList(with: blocking)
+    }
+
+    private func refreshProcessList(with blocking: [Volume: [ProcessInfo]]) {
+        aggregatedProcesses = aggregateProcesses(from: blocking)
+        selectedProcessIndexes = Set(0..<aggregatedProcesses.count)
+
+        processCheckboxes.removeAll()
+        processTableView.reloadData()
+        processSelectAllCheckbox.state = aggregatedProcesses.isEmpty ? .off : .on
+        updateProcessSelectAllState()
+        showProcessResolutionState()
+    }
+
+    private func aggregateProcesses(from map: [Volume: [ProcessInfo]]) -> [VolumeProcessInfo] {
+        let sortedVolumes = map.keys.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+
+        var aggregated: [VolumeProcessInfo] = []
+        for volume in sortedVolumes {
+            let processes = map[volume] ?? []
+            let sortedProcesses = processes.sorted { lhs, rhs in
+                let nameComparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+                if nameComparison == .orderedSame {
+                    return lhs.pid < rhs.pid
+                }
+                return nameComparison == .orderedAscending
+            }
+            for process in sortedProcesses {
+                aggregated.append(VolumeProcessInfo(volume: volume, process: process))
+            }
+        }
+        return aggregated
     }
 
     private func enumerateExternalVolumes() -> [Volume] {
@@ -231,10 +638,6 @@ class MainViewController: NSViewController {
                     let isRoot = resourceValues.volumeIsRootFileSystem ?? false
                     let volumeName = resourceValues.volumeLocalizedName ?? url.lastPathComponent
 
-                    print(
-                        "DEBUG: Checking volume: \(volumeName) (\(url.path)), removable: \(isRemovable), ejectable: \(isEjectable), internal: \(isInternal), root: \(isRoot)"
-                    )
-
                     if isRoot || url.path == "/" {
                         continue
                     }
@@ -256,7 +659,6 @@ class MainViewController: NSViewController {
                 }
             }
         }
-        print("DEBUG: enumerateExternalVolumes() returning \(result.count) volumes")
         return result
     }
 
@@ -292,99 +694,179 @@ class MainViewController: NSViewController {
         return result
     }
 
-    private func ejectVolume(_ volume: Volume) {
+    private func ejectVolume(_ volume: Volume) -> Bool {
         let task = Process()
         task.launchPath = "/usr/sbin/diskutil"
         task.arguments = ["eject", volume.path]
         do {
             try task.run()
             task.waitUntilExit()
+            return task.terminationStatus == 0
         } catch {
-            // Could log or show error
+            return false
         }
     }
 
-    @objc private func selectAllClicked() {
-        let newState = selectAllCheckbox.state
-        for checkbox in checkboxes {
-            checkbox.state = newState
-        }
-        updateActionButtonTitle()
-    }
-
-    @objc private func updateActionButtonTitle() {
-        let allChecked = checkboxes.allSatisfy { $0.state == .on }
-        if let button = view.subviews.compactMap({ $0 as? NSButton }).last {
-            button.title = allChecked ? "End processes and eject" : "End processes"
-        }
-    }
-
-    @objc private func actionButtonClicked() {
-        var selected: [VolumeProcessInfo] = []
-        for (index, checkbox) in checkboxes.enumerated() {
-            if checkbox.state == .on {
-                selected.append(aggregatedProcesses[index])
-            }
-        }
-        // End selected processes
-        for info in selected {
+    private func terminate(processes: [ProcessInfo]) {
+        for process in processes {
             let task = Process()
             task.launchPath = "/bin/kill"
-            task.arguments = ["-9", String(info.process.pid)]
+            task.arguments = ["-9", String(process.pid)]
             do {
                 try task.run()
                 task.waitUntilExit()
             } catch {
-                // Could log or show error
+                continue
             }
         }
-        // If all are selected, eject all affected volumes
-        if selected.count == aggregatedProcesses.count {
-            let affectedVolumes = Set(selected.map { $0.volume })
-            for volume in affectedVolumes {
-                ejectVolume(volume)
-            }
-        }
-        // Refresh
-        startVolumeScanAndEject()
+    }
+
+    @objc private func closeButtonClicked() {
+        view.window?.close()
     }
 }
 
 extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        return aggregatedProcesses.count
+        if tableView === volumeTableView {
+            return allVolumes.count
+        } else if tableView === processTableView {
+            return aggregatedProcesses.count
+        }
+        return 0
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
         -> NSView?
     {
         guard let columnIdentifier = tableColumn?.identifier else { return nil }
-        let info = aggregatedProcesses[row]
-        switch columnIdentifier.rawValue {
-        case "CheckColumn":
-            let checkbox = NSButton(
-                checkboxWithTitle: "", target: self, action: #selector(updateActionButtonTitle))
-            checkbox.state = .on
-            if row >= checkboxes.count {
-                checkboxes.append(checkbox)
-            } else {
-                checkboxes[row] = checkbox
+
+        if tableView === volumeTableView {
+            let volume = allVolumes[row]
+            switch columnIdentifier.rawValue {
+            case "VolumeCheckColumn":
+                let identifier = NSUserInterfaceItemIdentifier("VolumeCheckCell")
+                let checkbox: NSButton
+                if let existing = tableView.makeView(withIdentifier: identifier, owner: self)
+                    as? NSButton
+                {
+                    checkbox = existing
+                } else {
+                    checkbox = NSButton(
+                        checkboxWithTitle: "", target: self, action: #selector(volumeCheckboxToggled))
+                    checkbox.identifier = identifier
+                }
+                checkbox.target = self
+                checkbox.action = #selector(volumeCheckboxToggled)
+                checkbox.tag = row
+                checkbox.state = selectedVolumes.contains(volume) ? .on : .off
+                volumeCheckboxes[row] = checkbox
+                return checkbox
+            case "VolumeNameColumn":
+                let identifier = NSUserInterfaceItemIdentifier("VolumeNameCell")
+                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = identifier
+                    let textField = NSTextField(labelWithString: "")
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    cell?.addSubview(textField)
+                    cell?.textField = textField
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        textField.trailingAnchor.constraint(
+                            equalTo: cell!.trailingAnchor, constant: -4),
+                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
+                    ])
+                }
+                cell?.textField?.stringValue = volume.name
+                return cell
+            default:
+                return nil
             }
-            return checkbox
-        case "VolumeColumn":
-            let cell = NSTextField(labelWithString: info.volume.name)
-            cell.alignment = .left
-            return cell
-        case "NameColumn":
-            let cell = NSTextField(labelWithString: info.process.name)
-            cell.alignment = .left
-            return cell
-        case "PIDColumn":
-            let cell = NSTextField(labelWithString: String(info.process.pid))
-            cell.alignment = .left
-            return cell
-        default:
-            return nil
+        } else if tableView === processTableView {
+            let info = aggregatedProcesses[row]
+            switch columnIdentifier.rawValue {
+            case "ProcessCheckColumn":
+                let identifier = NSUserInterfaceItemIdentifier("ProcessCheckCell")
+                let checkbox: NSButton
+                if let existing = tableView.makeView(withIdentifier: identifier, owner: self)
+                    as? NSButton
+                {
+                    checkbox = existing
+                } else {
+                    checkbox = NSButton(
+                        checkboxWithTitle: "", target: self, action: #selector(processCheckboxToggled))
+                    checkbox.identifier = identifier
+                }
+                checkbox.target = self
+                checkbox.action = #selector(processCheckboxToggled)
+                checkbox.tag = row
+                checkbox.state = selectedProcessIndexes.contains(row) ? .on : .off
+                processCheckboxes[row] = checkbox
+                return checkbox
+            case "ProcessVolumeColumn":
+                let identifier = NSUserInterfaceItemIdentifier("ProcessVolumeCell")
+                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = identifier
+                    let textField = NSTextField(labelWithString: "")
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    cell?.addSubview(textField)
+                    cell?.textField = textField
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        textField.trailingAnchor.constraint(
+                            equalTo: cell!.trailingAnchor, constant: -4),
+                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
+                    ])
+                }
+                cell?.textField?.stringValue = info.volume.name
+                return cell
+            case "ProcessNameColumn":
+                let identifier = NSUserInterfaceItemIdentifier("ProcessNameCell")
+                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = identifier
+                    let textField = NSTextField(labelWithString: "")
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    cell?.addSubview(textField)
+                    cell?.textField = textField
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        textField.trailingAnchor.constraint(
+                            equalTo: cell!.trailingAnchor, constant: -4),
+                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
+                    ])
+                }
+                cell?.textField?.stringValue = info.process.name
+                return cell
+            case "ProcessPIDColumn":
+                let identifier = NSUserInterfaceItemIdentifier("ProcessPIDCell")
+                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = identifier
+                    let textField = NSTextField(labelWithString: "")
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    cell?.addSubview(textField)
+                    cell?.textField = textField
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        textField.trailingAnchor.constraint(
+                            equalTo: cell!.trailingAnchor, constant: -4),
+                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
+                    ])
+                }
+                cell?.textField?.stringValue = String(info.process.pid)
+                return cell
+            default:
+                return nil
+            }
         }
+
+        return nil
     }
 }
