@@ -19,6 +19,7 @@ class MainViewController: NSViewController {
     private var allVolumes: [Volume] = []
     private var selectedVolumes: Set<Volume> = []
     private var volumesPendingEjection: Set<Volume> = []
+    private var volumeIcons: [Volume: NSImage] = [:]
     private var aggregatedProcesses: [VolumeProcessInfo] = []
     private var selectedProcessIndexes: Set<Int> = []
 
@@ -246,6 +247,19 @@ class MainViewController: NSViewController {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         allVolumes = sortedVolumes
+
+        let iconSize = NSSize(width: 24, height: 24)
+        volumeIcons = [:]
+        for volume in sortedVolumes {
+            let baseIcon = NSWorkspace.shared.icon(forFile: volume.path)
+            if let copied = baseIcon.copy() as? NSImage {
+                copied.size = iconSize
+                volumeIcons[volume] = copied
+            } else {
+                baseIcon.size = iconSize
+                volumeIcons[volume] = baseIcon
+            }
+        }
 
         guard !sortedVolumes.isEmpty else {
             showNoVolumesState()
@@ -556,6 +570,9 @@ class MainViewController: NSViewController {
         if !successfulSet.isEmpty {
             allVolumes.removeAll { successfulSet.contains($0) }
             selectedVolumes.subtract(successfulSet)
+            for volume in successfulSet {
+                volumeIcons.removeValue(forKey: volume)
+            }
         }
 
         if blocking.isEmpty {
@@ -768,16 +785,32 @@ extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
                 if cell == nil {
                     cell = NSTableCellView()
                     cell?.identifier = identifier
+                    let imageView = NSImageView()
+                    imageView.translatesAutoresizingMaskIntoConstraints = false
+                    imageView.imageScaling = .scaleProportionallyDown
+                    cell?.addSubview(imageView)
+                    cell?.imageView = imageView
                     let textField = NSTextField(labelWithString: "")
                     textField.translatesAutoresizingMaskIntoConstraints = false
                     cell?.addSubview(textField)
                     cell?.textField = textField
                     NSLayoutConstraint.activate([
-                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        imageView.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                        imageView.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
+                        imageView.widthAnchor.constraint(equalToConstant: 24),
+                        imageView.heightAnchor.constraint(equalToConstant: 24),
+                        textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 6),
                         textField.trailingAnchor.constraint(
                             equalTo: cell!.trailingAnchor, constant: -4),
                         textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
                     ])
+                }
+                if let icon = volumeIcons[volume] {
+                    cell?.imageView?.image = icon
+                } else {
+                    let fallback = NSWorkspace.shared.icon(forFile: volume.path)
+                    fallback.size = NSSize(width: 24, height: 24)
+                    cell?.imageView?.image = fallback
                 }
                 cell?.textField?.stringValue = volume.name
                 return cell
@@ -868,5 +901,14 @@ extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
         }
 
         return nil
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        if tableView === volumeTableView {
+            return 36
+        } else if tableView === processTableView {
+            return 32
+        }
+        return tableView.rowHeight
     }
 }
