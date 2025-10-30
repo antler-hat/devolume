@@ -498,6 +498,7 @@ class MainViewController: NSViewController {
         volumeScrollView.isHidden = false
         ejectButton.isHidden = false
         updateEjectButtonState()
+        assignDefaultButton(ejectButton)
     }
 
     private func showProcessResolutionState() {
@@ -516,6 +517,7 @@ class MainViewController: NSViewController {
         processScrollView.isHidden = false
         endProcessesButton.isHidden = false
         updateProcessSelectAllState()
+        assignDefaultButton(endProcessesButton)
     }
 
     private func showCompletionState(message: String, emoji: String = "✅") {
@@ -534,7 +536,7 @@ class MainViewController: NSViewController {
         emptyStateEmoji.isHidden = false
         emptyStateText.isHidden = false
         closeButton.isHidden = false
-        focusCloseButton()
+        assignDefaultButton(closeButton)
     }
 
     private func showProgressState(message: String) {
@@ -550,6 +552,7 @@ class MainViewController: NSViewController {
         closeButton.isHidden = true
         emptyStateEmoji.isHidden = true
         emptyStateText.isHidden = true
+        assignDefaultButton(nil)
     }
 
     private func focusCloseButton() {
@@ -561,8 +564,21 @@ class MainViewController: NSViewController {
         }
 
         window.makeFirstResponder(closeButton)
-        if let cell = closeButton.cell as? NSButtonCell {
-            window.defaultButtonCell = cell
+    }
+
+    private func assignDefaultButton(_ button: NSButton?) {
+        guard let window = view.window else {
+            DispatchQueue.main.async { [weak self] in
+                self?.assignDefaultButton(button)
+            }
+            return
+        }
+
+        if let button = button {
+            window.defaultButtonCell = button.cell as? NSButtonCell
+            window.makeFirstResponder(button)
+        } else {
+            window.defaultButtonCell = nil
         }
     }
 
