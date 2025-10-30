@@ -1,4 +1,5 @@
 import Cocoa
+import QuartzCore
 
 struct VolumeProcessInfo {
     let volume: Volume
@@ -20,6 +21,9 @@ class MainViewController: NSViewController {
     private var selectedVolumes: Set<Volume> = []
     private var volumesPendingEjection: Set<Volume> = []
     private var volumeIcons: [Volume: NSImage] = [:]
+
+    private let minimumPreferredHeight: CGFloat = 300
+    private let expandedPreferredHeight: CGFloat = 600
     private var aggregatedProcesses: [VolumeProcessInfo] = []
     private var selectedProcessIndexes: Set<Int> = []
 
@@ -273,6 +277,7 @@ class MainViewController: NSViewController {
         updateVolumeSelectAllState()
         updateEjectButtonState()
         showVolumeSelectionState()
+        adjustWindowSizeIfNeeded()
     }
 
     private func showNoVolumesState() {
@@ -608,6 +613,7 @@ class MainViewController: NSViewController {
         processSelectAllCheckbox.state = aggregatedProcesses.isEmpty ? .off : .on
         updateProcessSelectAllState()
         showProcessResolutionState()
+        adjustWindowSizeIfNeeded()
     }
 
     private func aggregateProcesses(from map: [Volume: [ProcessInfo]]) -> [VolumeProcessInfo] {
@@ -630,6 +636,44 @@ class MainViewController: NSViewController {
             }
         }
         return aggregated
+    }
+
+    private func adjustWindowSizeIfNeeded() {
+        guard let window = view.window else { return }
+
+        let visibleRowCount: Int
+        if contentState == .volumeSelection {
+            visibleRowCount = allVolumes.count
+        } else if contentState == .processResolution {
+            visibleRowCount = aggregatedProcesses.count
+        } else {
+            visibleRowCount = 0
+        }
+
+        let targetHeight: CGFloat
+        if visibleRowCount > 4 {
+            targetHeight = expandedPreferredHeight
+        } else {
+            targetHeight = minimumPreferredHeight
+        }
+
+        let currentSize = window.contentView?.frame.size ?? window.frame.size
+        if abs(currentSize.height - targetHeight) < 1 {
+            return
+        }
+
+        var frame = window.frameRect(
+            forContentRect: NSRect(
+                origin: .zero,
+                size: NSSize(width: currentSize.width, height: targetHeight)))
+        frame.origin.x = window.frame.origin.x
+        frame.origin.y = window.frame.maxY - frame.height
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(frame, display: true, animate: true)
+        }
     }
 
     private func enumerateExternalVolumes() -> [Volume] {
