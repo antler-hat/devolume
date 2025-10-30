@@ -4,6 +4,43 @@ import QuartzCore
 struct VolumeProcessInfo {
     let volume: Volume
     let process: ProcessInfo
+    let safety: ProcessSafety
+    let descriptor: ProcessDescriptor?
+}
+
+private extension ProcessSafety {
+    var displayText: String {
+        switch self {
+        case .safe:
+            return "SAFE"
+        case .unsafe:
+            return "UNSAFE"
+        case .unknown:
+            return "UNKNOWN"
+        }
+    }
+
+    var backgroundColor: NSColor {
+        switch self {
+        case .safe:
+            return NSColor.systemGreen.withAlphaComponent(0.25)
+        case .unsafe:
+            return NSColor.systemRed.withAlphaComponent(0.25)
+        case .unknown:
+            return NSColor.systemGray.withAlphaComponent(0.25)
+        }
+    }
+
+    var textColor: NSColor {
+        switch self {
+        case .safe:
+            return NSColor.systemGreen
+        case .unsafe:
+            return NSColor.systemRed
+        case .unknown:
+            return NSColor.labelColor
+        }
+    }
 }
 
 class MainViewController: NSViewController {
@@ -46,6 +83,169 @@ class MainViewController: NSViewController {
     private var ejectButton: NSButton!
     private var endProcessesButton: NSButton!
     private var closeButton: NSButton!
+
+    private let processDescriptorList: [ProcessDescriptor] = [
+        ProcessDescriptor(
+            names: ["photos", "photos.app"],
+            category: "Apple Photos app",
+            safety: .safe,
+            notes: "Ends photo library access. No data loss."
+        ),
+        ProcessDescriptor(
+            names: ["photoanalysisd", "photoanal", "photoanalysis"],
+            category: "Photos analysis daemon",
+            safety: .safe,
+            notes: "Handles face/object analysis. Non-destructive to stop."
+        ),
+        ProcessDescriptor(
+            names: ["mediaanalysisd", "mediaanal"],
+            category: "Media analysis daemon",
+            safety: .safe,
+            notes: "Indexes media metadata. Safe to stop; work will resume later."
+        ),
+        ProcessDescriptor(
+            names: ["photolibr", "photolibraryd"],
+            category: "Photo library service",
+            safety: .safe,
+            notes: "Manages local library sync. Safe to quit."
+        ),
+        ProcessDescriptor(
+            names: ["cloudphotosd", "cloudphot"],
+            category: "iCloud Photos sync",
+            safety: .safe,
+            notes: "Stops iCloud Photos syncing until it restarts."
+        ),
+        ProcessDescriptor(
+            names: ["cleanmymac", "cleanmymacx", "cleanmymac x", "cleanmyma"],
+            category: "CleanMyMac helper",
+            safety: .safe,
+            notes: "Cancels the current cleanup task without lasting effects."
+        ),
+        ProcessDescriptor(
+            names: ["spotlight", "mds", "mds_stores", "mdworker", "mdworker_shared"],
+            category: "Spotlight indexing",
+            safety: .safe,
+            notes: "Pauses indexing temporarily; macOS will restart it automatically."
+        ),
+        ProcessDescriptor(
+            names: ["preview"],
+            category: "Preview",
+            safety: .safe,
+            notes: "Closes open documents. No data loss beyond unsaved changes."
+        ),
+        ProcessDescriptor(
+            names: ["quicklookuiservice", "quicklookui"],
+            category: "Quick Look service",
+            safety: .safe,
+            notes: "Stops thumbnail generation. macOS will relaunch it if needed."
+        ),
+        ProcessDescriptor(
+            names: ["dropbox"],
+            category: "Cloud sync client",
+            safety: .safe,
+            notes: "Pauses Dropbox syncing until relaunched."
+        ),
+        ProcessDescriptor(
+            names: ["googledrive", "google drive"],
+            category: "Cloud sync client",
+            safety: .safe,
+            notes: "Pauses Google Drive syncing until relaunched."
+        ),
+        ProcessDescriptor(
+            names: ["onedrive"],
+            category: "Cloud sync client",
+            safety: .safe,
+            notes: "Pauses OneDrive syncing until relaunched."
+        ),
+        ProcessDescriptor(
+            names: ["bird"],
+            category: "iCloud Drive daemon",
+            safety: .safe,
+            notes: "Stops iCloud Drive syncing temporarily."
+        ),
+        ProcessDescriptor(
+            names: ["soagent"],
+            category: "CloudKit service",
+            safety: .safe,
+            notes: "Pauses CloudKit sync until the agent restarts."
+        ),
+        ProcessDescriptor(
+            names: ["messages", "imagent"],
+            category: "Messages",
+            safety: .safe,
+            notes: "Closes the Messages app or helper. Safe to reopen later."
+        ),
+        ProcessDescriptor(
+            names: ["finder"],
+            category: "Finder",
+            safety: .unsafe,
+            notes: "macOS restarts Finder automatically, but quitting may disrupt user workflow."
+        ),
+        ProcessDescriptor(
+            names: ["backupd", "com.apple.timemachine"],
+            category: "Time Machine backup",
+            safety: .unsafe,
+            notes: "Interrupts Time Machine backups; risk of incomplete backup."
+        ),
+        ProcessDescriptor(
+            names: ["fsck"],
+            category: "Filesystem check",
+            safety: .unsafe,
+            notes: "May interrupt disk repairs and risk corruption."
+        ),
+        ProcessDescriptor(
+            names: ["diskutil"],
+            category: "Disk utility task",
+            safety: .unsafe,
+            notes: "Stopping may leave disk operations incomplete."
+        ),
+        ProcessDescriptor(
+            names: ["cp", "mv", "rsync"],
+            category: "File transfer",
+            safety: .unsafe,
+            notes: "Stopping may interrupt file copy or sync operations."
+        ),
+        ProcessDescriptor(
+            names: ["finalcutpro"],
+            category: "Final Cut Pro",
+            safety: .unsafe,
+            notes: "Avoid quitting during editing or exports to prevent data loss."
+        ),
+        ProcessDescriptor(
+            names: ["logicpro"],
+            category: "Logic Pro",
+            safety: .unsafe,
+            notes: "Avoid quitting during editing or renders to prevent data loss."
+        ),
+        ProcessDescriptor(
+            names: ["premiere", "adobepremierepro"],
+            category: "Premiere Pro",
+            safety: .unsafe,
+            notes: "Avoid quitting during exports to prevent corruption."
+        ),
+        ProcessDescriptor(
+            names: ["kernel_task"],
+            category: "Core system process",
+            safety: .unsafe,
+            notes: "Critical system process. Never terminate."
+        ),
+        ProcessDescriptor(
+            names: ["windowserver"],
+            category: "macOS window manager",
+            safety: .unsafe,
+            notes: "Quitting will log you out immediately."
+        )
+    ]
+
+    private lazy var processDescriptorLookup: [String: ProcessDescriptor] = {
+        var lookup: [String: ProcessDescriptor] = [:]
+        for descriptor in processDescriptorList {
+            for name in descriptor.names {
+                lookup[name.lowercased()] = descriptor
+            }
+        }
+        return lookup
+    }()
 
     override func loadView() {
         self.view = NSView()
@@ -96,6 +296,7 @@ class MainViewController: NSViewController {
         volumeTableView = NSTableView()
         volumeTableView.delegate = self
         volumeTableView.dataSource = self
+        volumeTableView.usesAlternatingRowBackgroundColors = true
 
         let volumeCheckColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("VolumeCheckColumn"))
@@ -120,6 +321,7 @@ class MainViewController: NSViewController {
         processScrollView = NSScrollView()
         processScrollView.translatesAutoresizingMaskIntoConstraints = false
         processScrollView.hasVerticalScroller = true
+        processScrollView.hasHorizontalScroller = false
         processScrollView.borderType = .bezelBorder
         processScrollView.isHidden = true
         view.addSubview(processScrollView)
@@ -136,23 +338,19 @@ class MainViewController: NSViewController {
         processCheckColumn.headerCell = processHeaderCell
         processTableView.addTableColumn(processCheckColumn)
 
-        let processVolumeColumn = NSTableColumn(
-            identifier: NSUserInterfaceItemIdentifier("ProcessVolumeColumn"))
-        processVolumeColumn.title = "Drive"
-        processVolumeColumn.width = 180
-        processTableView.addTableColumn(processVolumeColumn)
-
         let processNameColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessNameColumn"))
         processNameColumn.title = "Process Name"
-        processNameColumn.width = 240
+        processNameColumn.width = 220
         processTableView.addTableColumn(processNameColumn)
 
-        let processPIDColumn = NSTableColumn(
-            identifier: NSUserInterfaceItemIdentifier("ProcessPIDColumn"))
-        processPIDColumn.title = "PID"
-        processPIDColumn.width = 80
-        processTableView.addTableColumn(processPIDColumn)
+        let processSafetyColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessSafetyColumn"))
+        processSafetyColumn.title = ""
+        processSafetyColumn.width = 70
+        processSafetyColumn.minWidth = 60
+        processSafetyColumn.maxWidth = 90
+        processTableView.addTableColumn(processSafetyColumn)
 
         processScrollView.documentView = processTableView
 
@@ -305,7 +503,7 @@ class MainViewController: NSViewController {
     private func showProcessResolutionState() {
         contentState = .processResolution
         infoLabel.stringValue =
-            "Processes are preventing ejection. Select which to end:"
+            "Processes are preventing ejection"
 
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -388,6 +586,7 @@ class MainViewController: NSViewController {
                 headerView.addSubview(processSelectAllCheckbox)
             }
         }
+        processTableView.usesAlternatingRowBackgroundColors = true
     }
 
     @objc private func volumeSelectAllClicked() {
@@ -632,10 +831,57 @@ class MainViewController: NSViewController {
                 return nameComparison == .orderedAscending
             }
             for process in sortedProcesses {
-                aggregated.append(VolumeProcessInfo(volume: volume, process: process))
+                let classification = classifyProcess(process)
+                aggregated.append(
+                    VolumeProcessInfo(
+                        volume: volume,
+                        process: process,
+                        safety: classification.safety,
+                        descriptor: classification.descriptor
+                    )
+                )
             }
         }
         return aggregated
+    }
+
+    private func classifyProcess(_ process: ProcessInfo) -> (safety: ProcessSafety, descriptor: ProcessDescriptor?) {
+        let lowercased = process.name.lowercased()
+        if let descriptor = processDescriptorLookup[lowercased] {
+            return (descriptor.safety, descriptor)
+        }
+
+        // Handle truncated or suffixed process names by checking for prefix matches
+        for descriptor in processDescriptorList {
+            if descriptor.names.contains(where: { name in
+                let lowerName = name.lowercased()
+                return lowercased.hasPrefix(lowerName) || lowerName.hasPrefix(lowercased)
+            }) {
+                return (descriptor.safety, descriptor)
+            }
+        }
+
+        return (.unknown, nil)
+    }
+
+    private func configureSafetyLabel(_ label: NSTextField, safety: ProcessSafety, descriptor: ProcessDescriptor? = nil) {
+        label.stringValue = safety.displayText
+        label.textColor = safety.textColor
+        if label.layer == nil {
+            label.wantsLayer = true
+        }
+        label.layer?.backgroundColor = safety.backgroundColor.cgColor
+        label.layer?.cornerRadius = 4
+        label.layer?.masksToBounds = true
+        label.layer?.borderWidth = 0
+        label.layer?.contentsGravity = .center
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        if let descriptor = descriptor {
+            label.toolTip = "\(descriptor.category): \(descriptor.notes)"
+        } else {
+            label.toolTip = nil
+        }
     }
 
     private func adjustWindowSizeIfNeeded() {
@@ -938,6 +1184,32 @@ extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
                     ])
                 }
                 cell?.textField?.stringValue = String(info.process.pid)
+                return cell
+            case "ProcessSafetyColumn":
+                let identifier = NSUserInterfaceItemIdentifier("ProcessSafetyCell")
+                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = identifier
+                    let textField = NSTextField(labelWithString: "")
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    textField.alignment = .center
+                    textField.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+                    textField.lineBreakMode = .byClipping
+                    textField.wantsLayer = true
+                    textField.isBezeled = false
+                    textField.drawsBackground = false
+                    cell?.addSubview(textField)
+                    cell?.textField = textField
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 8),
+                        textField.trailingAnchor.constraint(lessThanOrEqualTo: cell!.trailingAnchor, constant: -8),
+                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor)
+                    ])
+                }
+                if let label = cell?.textField {
+                    configureSafetyLabel(label, safety: info.safety, descriptor: info.descriptor)
+                }
                 return cell
             default:
                 return nil
