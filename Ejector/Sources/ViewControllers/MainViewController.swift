@@ -52,6 +52,7 @@ class MainViewController: NSViewController {
         case completion
     }
 
+    private let volumeManager = VolumeManager()
     private var contentState: ContentState = .scanning
 
     private var allVolumes: [Volume] = []
@@ -247,6 +248,27 @@ class MainViewController: NSViewController {
         return lookup
     }()
 
+    private func ensureViewLoadedIfNeeded() {
+        if !isViewLoaded {
+            _ = view
+        }
+    }
+
+    private func populateVolumeIcons(for volumes: [Volume]) {
+        let iconSize = NSSize(width: 24, height: 24)
+        volumeIcons = [:]
+        for volume in volumes {
+            let baseIcon = NSWorkspace.shared.icon(forFile: volume.path)
+            if let copied = baseIcon.copy() as? NSImage {
+                copied.size = iconSize
+                volumeIcons[volume] = copied
+            } else {
+                baseIcon.size = iconSize
+                volumeIcons[volume] = baseIcon
+            }
+        }
+    }
+
     override func loadView() {
         self.view = NSView()
         setupUI()
@@ -441,7 +463,7 @@ class MainViewController: NSViewController {
 
     private func scanForVolumes() {
         DispatchQueue.global(qos: .userInitiated).async {
-            let volumes = self.enumerateExternalVolumes()
+            let volumes = self.volumeManager.enumerateExternalVolumes()
             DispatchQueue.main.async {
                 self.handleVolumeScanResult(volumes)
             }
@@ -457,18 +479,7 @@ class MainViewController: NSViewController {
         }
         allVolumes = sortedVolumes
 
-        let iconSize = NSSize(width: 24, height: 24)
-        volumeIcons = [:]
-        for volume in sortedVolumes {
-            let baseIcon = NSWorkspace.shared.icon(forFile: volume.path)
-            if let copied = baseIcon.copy() as? NSImage {
-                copied.size = iconSize
-                volumeIcons[volume] = copied
-            } else {
-                baseIcon.size = iconSize
-                volumeIcons[volume] = baseIcon
-            }
-        }
+        populateVolumeIcons(for: sortedVolumes)
 
         guard !sortedVolumes.isEmpty else {
             showNoVolumesState()
@@ -696,11 +707,11 @@ class MainViewController: NSViewController {
         showProgressState(message: "Ending selected processes...")
 
         DispatchQueue.global(qos: .userInitiated).async {
-            self.terminate(processes: uniqueProcesses)
+            self.volumeManager.terminate(processes: uniqueProcesses)
             let volumesToCheck = Array(self.volumesPendingEjection)
             var updatedBlocking: [Volume: [ProcessInfo]] = [:]
             for volume in volumesToCheck {
-                let processes = self.findProcessesUsingVolume(volume)
+                let processes = self.volumeManager.findProcessesUsingVolume(volume)
                 if !processes.isEmpty {
                     updatedBlocking[volume] = processes
                 }
@@ -762,29 +773,12 @@ class MainViewController: NSViewController {
         showProgressState(message: "Ejecting selected drives...")
 
         DispatchQueue.global(qos: .userInitiated).async {
-            var successful: [Volume] = []
-            var blocking: [Volume: [ProcessInfo]] = [:]
-            var failedWithoutProcesses: [Volume] = []
-
-            for volume in volumes {
-                let processes = self.findProcessesUsingVolume(volume)
-                if !processes.isEmpty {
-                    blocking[volume] = processes
-                    continue
-                }
-
-                if self.ejectVolume(volume) {
-                    successful.append(volume)
-                } else {
-                    failedWithoutProcesses.append(volume)
-                }
-            }
-
+            let result = self.volumeManager.attemptEject(volumes: volumes)
             DispatchQueue.main.async {
                 self.handleEjectResult(
-                    successful: successful,
-                    blocking: blocking,
-                    failedWithoutProcesses: failedWithoutProcesses
+                    successful: result.successful,
+                    blocking: result.blocking,
+                    failedWithoutProcesses: result.failedWithoutProcesses
                 )
             }
         }
@@ -945,110 +939,53 @@ class MainViewController: NSViewController {
         }
     }
 
-    private func enumerateExternalVolumes() -> [Volume] {
-        var result: [Volume] = []
-        let keys: Set<URLResourceKey> = [
-            .volumeIsRemovableKey,
-            .volumeIsEjectableKey,
-            .volumeURLForRemountingKey,
-            .volumeNameKey,
-            .volumeLocalizedNameKey,
-            .volumeIsInternalKey,
-            .volumeIsRootFileSystemKey,
-        ]
-        if let mountedVolumeURLs = FileManager.default.mountedVolumeURLs(
-            includingResourceValuesForKeys: Array(keys), options: [.skipHiddenVolumes])
-        {
-            for url in mountedVolumeURLs {
-                do {
-                    let resourceValues = try url.resourceValues(forKeys: keys)
-                    let isRemovable = resourceValues.volumeIsRemovable ?? false
-                    let isEjectable = resourceValues.volumeIsEjectable ?? false
-                    let isInternal = resourceValues.volumeIsInternal ?? true
-                    let isRoot = resourceValues.volumeIsRootFileSystem ?? false
-                    let volumeName = resourceValues.volumeLocalizedName ?? url.lastPathComponent
-
-                    if isRoot || url.path == "/" {
-                        continue
-                    }
-                    let systemPaths = [
-                        "/System", "/private", "/home", "/net", "/Network", "/dev",
-                        "/Volumes/Recovery",
-                    ]
-                    if systemPaths.contains(where: { url.path.hasPrefix($0) }) {
-                        continue
-                    }
-                    if !isInternal || isRemovable || isEjectable {
-                        if url.path.hasPrefix("/Volumes/") {
-                            let volume = Volume(name: volumeName, path: url.path)
-                            result.append(volume)
-                        }
-                    }
-                } catch {
-                    continue
-                }
-            }
+    func presentEjectionOutcome(for attemptedVolumes: [Volume], result: VolumeEjectResult) {
+        ensureViewLoadedIfNeeded()
+        let sortedVolumes = attemptedVolumes.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
-        return result
+        allVolumes = sortedVolumes
+        selectedVolumes = Set(sortedVolumes)
+        populateVolumeIcons(for: sortedVolumes)
+        volumeCheckboxes.removeAll()
+        processCheckboxes.removeAll()
+        aggregatedProcesses.removeAll()
+        selectedProcessIndexes.removeAll()
+        handleEjectResult(
+            successful: result.successful,
+            blocking: result.blocking,
+            failedWithoutProcesses: result.failedWithoutProcesses
+        )
     }
 
-    private func findProcessesUsingVolume(_ volume: Volume) -> [ProcessInfo] {
-        var result: [ProcessInfo] = []
-        let task = Process()
-        task.launchPath = "/usr/sbin/lsof"
-        task.arguments = [volume.path]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        do {
-            try task.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                let lines = output.components(separatedBy: "\n")
-                for i in 1..<lines.count {
-                    let line = lines[i]
-                    let components = line.components(separatedBy: " ").filter { !$0.isEmpty }
-                    if components.count >= 2 {
-                        let processName = components[0]
-                        if let pid = Int(components[1]) {
-                            let process = ProcessInfo(name: processName, pid: pid)
-                            if !result.contains(where: { $0.pid == pid }) {
-                                result.append(process)
-                            }
-                        }
-                    }
-                }
-            }
-        } catch {
-            // Ignore errors
-        }
-        return result
+    func presentCompletion(message: String, emoji: String = "✅") {
+        ensureViewLoadedIfNeeded()
+        allVolumes.removeAll()
+        selectedVolumes.removeAll()
+        volumesPendingEjection.removeAll()
+        aggregatedProcesses.removeAll()
+        selectedProcessIndexes.removeAll()
+        volumeIcons.removeAll()
+        volumeCheckboxes.removeAll()
+        processCheckboxes.removeAll()
+        volumeTableView.reloadData()
+        processTableView.reloadData()
+        showCompletionState(message: message, emoji: emoji)
     }
 
-    private func ejectVolume(_ volume: Volume) -> Bool {
-        let task = Process()
-        task.launchPath = "/usr/sbin/diskutil"
-        task.arguments = ["eject", volume.path]
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
-    private func terminate(processes: [ProcessInfo]) {
-        for process in processes {
-            let task = Process()
-            task.launchPath = "/bin/kill"
-            task.arguments = ["-9", String(process.pid)]
-            do {
-                try task.run()
-                task.waitUntilExit()
-            } catch {
-                continue
-            }
-        }
+    func restartScan() {
+        ensureViewLoadedIfNeeded()
+        allVolumes.removeAll()
+        selectedVolumes.removeAll()
+        volumesPendingEjection.removeAll()
+        aggregatedProcesses.removeAll()
+        selectedProcessIndexes.removeAll()
+        volumeCheckboxes.removeAll()
+        processCheckboxes.removeAll()
+        volumeTableView.reloadData()
+        processTableView.reloadData()
+        showScanningState()
+        scanForVolumes()
     }
 
     @objc private func closeButtonClicked() {
