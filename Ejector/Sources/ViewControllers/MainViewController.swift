@@ -266,7 +266,7 @@ class MainViewController: NSViewController {
         view.addSubview(infoLabel)
 
         emptyStateEmoji = NSTextField(labelWithString: "✅")
-        emptyStateEmoji.font = NSFont.systemFont(ofSize: 60)
+        emptyStateEmoji.font = NSFont.systemFont(ofSize: 30)
         emptyStateEmoji.alignment = .center
         emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
         emptyStateEmoji.isHidden = true
