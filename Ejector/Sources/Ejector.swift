@@ -40,13 +40,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
 
         if let button = item.button {
-            if let image = NSImage(systemSymbolName: "eject.fill", accessibilityDescription: "Ejector") {
+            if let image = NSImage(named: "iconTemplate") {
                 image.isTemplate = true
+                image.size = NSSize(width: 16, height: 16)
                 button.image = image
             } else {
                 button.title = "⏏︎"
             }
             button.toolTip = "Ejector"
+            button.imageScaling = .scaleProportionallyDown
+            button.controlSize = .small
         }
 
         let menu = NSMenu()
