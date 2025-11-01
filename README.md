@@ -1,12 +1,13 @@
 # Ejector
 
-Ejector is a macOS application that helps you manage processes using external volumes. It allows you to identify and terminate processes that are preventing you from ejecting external drives.
+Ejector is a macOS utility that helps you safely remove external drives. It automatically ejects any drives that are ready to go and highlights the processes that still have files open so you can address them quickly.
 
 ## Features
 
-- Lists all external volumes connected to your Mac
-- Shows processes that are using a selected volume
-- Allows you to terminate processes to safely eject the volume
+- Scans every mounted external volume on launch
+- Automatically ejects drives with no blocking processes
+- Aggregates all blocking processes in a single table with drive context
+- Lets you terminate selected processes and retries the ejection flow
 
 ## Requirements
 
@@ -31,12 +32,11 @@ Ejector is a macOS application that helps you manage processes using external vo
 
 ## Usage
 
-1. Launch Ejector from your Applications folder
-2. Select an external volume from the list
-3. View the processes that are using the volume
-4. Select the processes you want to terminate
-5. Click "End Processes" to terminate the selected processes
-6. Once all processes are terminated, you can safely eject the volume
+1. Launch Ejector from your Applications folder.
+2. The app will immediately scan and eject any external drives that are safe to remove.
+3. If some drives are still in use, you'll see a single list of the blocking processes along with the volume each one is using.
+4. Leave the processes you want to terminate selected and click **End processes**.
+5. When all blocking processes are gone, Ejector automatically retries the ejection and confirms when every selected drive is safe to unplug.
 
 ## Building from Source
 
@@ -46,7 +46,7 @@ The application is built using Swift and the Cocoa framework. To build from sour
 ./build.sh
 ```
 
-This script compiles the Swift source files and creates an application bundle in your `~/Applications` folder.
+This script compiles the Swift sources, assembles an app bundle under `build/`, and replaces any existing install at `~/Applications/Ejector.app`.
 
 ## License
 

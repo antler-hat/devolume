@@ -33,8 +33,12 @@ if [ -d "Ejector/Resources" ]; then
     cp -R Ejector/Resources/* "$RESOURCES_DIR/" 2>/dev/null || true
 fi
 
+TARGET_APP=~/Applications/$APP_NAME.app
 echo "Installing to ~/Applications..."
-rm -rf ~/Applications/$APP_NAME.app
+if [ -d "$TARGET_APP" ]; then
+    echo "Found existing install at $TARGET_APP; replacing it."
+    rm -rf "$TARGET_APP"
+fi
 cp -R "$APP_BUNDLE" ~/Applications/
 
 echo "Build complete! $APP_NAME.app has been installed to ~/Applications/"

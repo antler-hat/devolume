@@ -338,6 +338,13 @@ class MainViewController: NSViewController {
         processCheckColumn.headerCell = processHeaderCell
         processTableView.addTableColumn(processCheckColumn)
 
+        let processVolumeColumn = NSTableColumn(
+            identifier: NSUserInterfaceItemIdentifier("ProcessVolumeColumn"))
+        processVolumeColumn.title = "Volume"
+        processVolumeColumn.width = 160
+        processVolumeColumn.minWidth = 140
+        processTableView.addTableColumn(processVolumeColumn)
+
         let processNameColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessNameColumn"))
         processNameColumn.title = "Process Name"
@@ -1181,25 +1188,6 @@ extension MainViewController: NSTableViewDelegate, NSTableViewDataSource {
                     ])
                 }
                 cell?.textField?.stringValue = info.process.name
-                return cell
-            case "ProcessPIDColumn":
-                let identifier = NSUserInterfaceItemIdentifier("ProcessPIDCell")
-                var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
-                if cell == nil {
-                    cell = NSTableCellView()
-                    cell?.identifier = identifier
-                    let textField = NSTextField(labelWithString: "")
-                    textField.translatesAutoresizingMaskIntoConstraints = false
-                    cell?.addSubview(textField)
-                    cell?.textField = textField
-                    NSLayoutConstraint.activate([
-                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
-                        textField.trailingAnchor.constraint(
-                            equalTo: cell!.trailingAnchor, constant: -4),
-                        textField.centerYAnchor.constraint(equalTo: cell!.centerYAnchor),
-                    ])
-                }
-                cell?.textField?.stringValue = String(info.process.pid)
                 return cell
             case "ProcessSafetyColumn":
                 let identifier = NSUserInterfaceItemIdentifier("ProcessSafetyCell")
