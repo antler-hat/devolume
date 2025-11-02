@@ -351,10 +351,15 @@ class MainViewController: NSViewController {
         processTableView = NSTableView()
         processTableView.delegate = self
         processTableView.dataSource = self
+        processTableView.intercellSpacing = NSSize(width: 2, height: 0)
+        processTableView.columnAutoresizingStyle = .sequentialColumnAutoresizingStyle
 
         let processCheckColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessCheckColumn"))
-        processCheckColumn.width = 30
+        processCheckColumn.width = 26
+        processCheckColumn.minWidth = 24
+        processCheckColumn.maxWidth = 32
+        processCheckColumn.resizingMask = []
         let processHeaderCell = NSTableHeaderCell()
         processHeaderCell.title = ""
         processCheckColumn.headerCell = processHeaderCell
@@ -363,22 +368,26 @@ class MainViewController: NSViewController {
         let processVolumeColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessVolumeColumn"))
         processVolumeColumn.title = "Volume"
-        processVolumeColumn.width = 160
-        processVolumeColumn.minWidth = 140
+        processVolumeColumn.width = 140
+        processVolumeColumn.minWidth = 120
+        processVolumeColumn.resizingMask = [.autoresizingMask]
         processTableView.addTableColumn(processVolumeColumn)
 
         let processNameColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessNameColumn"))
         processNameColumn.title = "Process Name"
-        processNameColumn.width = 220
+        processNameColumn.width = 210
+        processNameColumn.minWidth = 180
+        processNameColumn.resizingMask = [.autoresizingMask]
         processTableView.addTableColumn(processNameColumn)
 
         let processSafetyColumn = NSTableColumn(
             identifier: NSUserInterfaceItemIdentifier("ProcessSafetyColumn"))
         processSafetyColumn.title = ""
-        processSafetyColumn.width = 70
+        processSafetyColumn.width = 64
         processSafetyColumn.minWidth = 60
-        processSafetyColumn.maxWidth = 90
+        processSafetyColumn.maxWidth = 80
+        processSafetyColumn.resizingMask = []
         processTableView.addTableColumn(processSafetyColumn)
 
         processScrollView.documentView = processTableView
