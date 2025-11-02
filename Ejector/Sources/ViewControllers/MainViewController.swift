@@ -96,6 +96,7 @@ class MainViewController: NSViewController {
     }
 
     private let volumeManager = VolumeManager()
+    private let ruleStore: ProcessRuleStore
     private var contentState: ContentState = .scanning
 
     private var allVolumes: [Volume] = []
@@ -123,10 +124,23 @@ class MainViewController: NSViewController {
     private var processScrollView: NSScrollView!
     private var processTableView: NSTableView!
     private var processSelectAllCheckbox: NSButton!
+    private var saveSelectionToggle: NSButton!
+    private var shouldSaveSelectedProcessesAsRules = false
+    private var skipRuleAutomationOnce = false
 
     private var ejectButton: NSButton!
     private var endProcessesButton: NSButton!
     private var closeButton: NSButton!
+
+    init(ruleStore: ProcessRuleStore = ProcessRuleStore()) {
+        self.ruleStore = ruleStore
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     private let processDescriptorList: [ProcessDescriptor] = [
         ProcessDescriptor(
@@ -439,6 +453,17 @@ class MainViewController: NSViewController {
             checkboxWithTitle: "", target: self, action: #selector(processSelectAllClicked))
         processSelectAllCheckbox.allowsMixedState = true
 
+        saveSelectionToggle = NSButton(
+            title: "Always end these immediately",
+            target: self,
+            action: #selector(saveSelectionToggleChanged)
+        )
+        saveSelectionToggle.setButtonType(.switch)
+        saveSelectionToggle.translatesAutoresizingMaskIntoConstraints = false
+        saveSelectionToggle.isHidden = true
+        saveSelectionToggle.isEnabled = false
+        view.addSubview(saveSelectionToggle)
+
         ejectButton = NSButton(
             title: "Eject Drives", target: self, action: #selector(ejectButtonClicked))
         ejectButton.translatesAutoresizingMaskIntoConstraints = false
@@ -479,6 +504,11 @@ class MainViewController: NSViewController {
 
             ejectButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             ejectButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+
+            saveSelectionToggle.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            saveSelectionToggle.centerYAnchor.constraint(equalTo: endProcessesButton.centerYAnchor),
+            saveSelectionToggle.trailingAnchor.constraint(
+                lessThanOrEqualTo: endProcessesButton.leadingAnchor, constant: -12),
 
             endProcessesButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             endProcessesButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
@@ -567,6 +597,9 @@ class MainViewController: NSViewController {
 
         volumeScrollView.isHidden = false
         ejectButton.isHidden = false
+        saveSelectionToggle.isHidden = true
+        saveSelectionToggle.state = .off
+        shouldSaveSelectedProcessesAsRules = false
         updateEjectButtonState()
         assignDefaultButton(ejectButton)
     }
@@ -586,6 +619,8 @@ class MainViewController: NSViewController {
 
         processScrollView.isHidden = false
         endProcessesButton.isHidden = false
+        saveSelectionToggle.isHidden = false
+        updateSaveRuleToggleState()
         updateProcessSelectAllState()
         assignDefaultButton(endProcessesButton)
     }
@@ -602,6 +637,7 @@ class MainViewController: NSViewController {
         processScrollView.isHidden = true
         ejectButton.isHidden = true
         endProcessesButton.isHidden = true
+        saveSelectionToggle.isHidden = true
 
         emptyStateEmoji.isHidden = false
         emptyStateText.isHidden = false
@@ -619,6 +655,7 @@ class MainViewController: NSViewController {
         processScrollView.isHidden = true
         ejectButton.isHidden = true
         endProcessesButton.isHidden = true
+        saveSelectionToggle.isHidden = true
         closeButton.isHidden = true
         emptyStateEmoji.isHidden = true
         emptyStateText.isHidden = true
@@ -736,6 +773,20 @@ class MainViewController: NSViewController {
         updateProcessSelectAllState()
     }
 
+    @objc private func saveSelectionToggleChanged(_ sender: NSButton) {
+        guard !aggregatedProcesses.isEmpty else {
+            sender.state = .off
+            shouldSaveSelectedProcessesAsRules = false
+            return
+        }
+        if selectedProcessIndexes.isEmpty {
+            sender.state = .off
+            shouldSaveSelectedProcessesAsRules = false
+            return
+        }
+        shouldSaveSelectedProcessesAsRules = sender.state == .on
+    }
+
     @objc private func ejectButtonClicked() {
         let volumesToEject = allVolumes.filter { selectedVolumes.contains($0) }
         guard !volumesToEject.isEmpty else { return }
@@ -752,9 +803,17 @@ class MainViewController: NSViewController {
 
         guard !selectedInfos.isEmpty else { return }
 
-        let uniqueProcesses = selectedInfos.reduce(into: [Int: ProcessInfo]()) { partialResult, info in
+        let uniqueProcessesMap = selectedInfos.reduce(into: [Int: ProcessInfo]()) { partialResult, info in
             partialResult[info.process.pid] = info.process
-        }.map { $0.value }
+        }
+        let uniqueProcesses = Array(uniqueProcessesMap.values)
+
+        if shouldSaveSelectedProcessesAsRules {
+            ruleStore.addRules(for: uniqueProcesses)
+            shouldSaveSelectedProcessesAsRules = false
+            saveSelectionToggle.state = .off
+            updateSaveRuleToggleState()
+        }
 
         showProgressState(message: "Ending selected processes...")
 
@@ -804,6 +863,7 @@ class MainViewController: NSViewController {
         guard total > 0 else {
             processSelectAllCheckbox.state = .off
             processSelectAllCheckbox.isEnabled = false
+            updateSaveRuleToggleState()
             return
         }
         processSelectAllCheckbox.isEnabled = true
@@ -813,6 +873,17 @@ class MainViewController: NSViewController {
             processSelectAllCheckbox.state = .off
         } else {
             processSelectAllCheckbox.state = .mixed
+        }
+        updateSaveRuleToggleState()
+    }
+
+    private func updateSaveRuleToggleState() {
+        guard saveSelectionToggle != nil else { return }
+        let hasSelection = !selectedProcessIndexes.isEmpty
+        saveSelectionToggle.isEnabled = hasSelection
+        if !hasSelection {
+            saveSelectionToggle.state = .off
+            shouldSaveSelectedProcessesAsRules = false
         }
     }
 
@@ -869,6 +940,17 @@ class MainViewController: NSViewController {
         }
 
         volumesPendingEjection = Set(blocking.keys)
+
+        if skipRuleAutomationOnce {
+            skipRuleAutomationOnce = false
+            refreshProcessList(with: blocking)
+            return
+        }
+
+        if applySavedRulesIfNeeded(on: blocking) {
+            return
+        }
+
         refreshProcessList(with: blocking)
     }
 
@@ -882,6 +964,40 @@ class MainViewController: NSViewController {
         updateProcessSelectAllState()
         showProcessResolutionState()
         adjustWindowSizeIfNeeded()
+    }
+
+    private func applySavedRulesIfNeeded(on blocking: [Volume: [ProcessInfo]]) -> Bool {
+        var processesByPid: [Int: ProcessInfo] = [:]
+
+        for (_, processes) in blocking {
+            for process in processes {
+                if ruleStore.containsRule(for: process.name) {
+                    processesByPid[process.pid] = process
+                }
+            }
+        }
+
+        guard !processesByPid.isEmpty else {
+            return false
+        }
+
+        let processesToTerminate = Array(processesByPid.values)
+        showProgressState(message: "Ending saved processes...")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.volumeManager.terminate(processes: processesToTerminate)
+            let volumesToCheck = Array(self.volumesPendingEjection)
+            DispatchQueue.main.async {
+                self.skipRuleAutomationOnce = true
+                guard !volumesToCheck.isEmpty else {
+                    self.showCompletionState(message: "All selected drives were ejected.")
+                    return
+                }
+                self.attemptEject(volumes: volumesToCheck)
+            }
+        }
+
+        return true
     }
 
     private func aggregateProcesses(from map: [Volume: [ProcessInfo]]) -> [VolumeProcessInfo] {
@@ -1020,8 +1136,11 @@ class MainViewController: NSViewController {
         volumeIcons.removeAll()
         volumeCheckboxes.removeAll()
         processCheckboxes.removeAll()
+        shouldSaveSelectedProcessesAsRules = false
+        saveSelectionToggle.state = .off
         volumeTableView.reloadData()
         processTableView.reloadData()
+        skipRuleAutomationOnce = false
         showCompletionState(message: message, emoji: emoji)
     }
 
@@ -1034,8 +1153,11 @@ class MainViewController: NSViewController {
         selectedProcessIndexes.removeAll()
         volumeCheckboxes.removeAll()
         processCheckboxes.removeAll()
+        shouldSaveSelectedProcessesAsRules = false
+        saveSelectionToggle.state = .off
         volumeTableView.reloadData()
         processTableView.reloadData()
+        skipRuleAutomationOnce = false
         showScanningState()
         scanForVolumes()
     }
