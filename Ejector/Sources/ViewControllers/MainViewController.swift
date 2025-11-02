@@ -574,7 +574,7 @@ class MainViewController: NSViewController {
     private func showProcessResolutionState() {
         contentState = .processResolution
         infoLabel.stringValue =
-            "Processes are preventing ejection. Take a look and end any that are safe to close:"
+            "Processes are preventing ejection"
 
         spinner.stopAnimation(nil)
         spinner.isHidden = true
