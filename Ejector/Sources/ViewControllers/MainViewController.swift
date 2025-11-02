@@ -1,6 +1,49 @@
 import Cocoa
 import QuartzCore
 
+private struct ProcessSafetyBadgeStyle {
+    let textHex: String
+    let backgroundHex: String
+    let backgroundAlphaOverride: CGFloat?
+    let fallbackText: NSColor
+    let fallbackBackground: NSColor
+
+    var textColor: NSColor {
+        NSColor.fromHex(textHex) ?? fallbackText
+    }
+
+    var backgroundColor: NSColor {
+        NSColor.fromHex(backgroundHex, alpha: backgroundAlphaOverride) ?? fallbackBackground
+    }
+}
+
+private enum ProcessSafetyBadgePalette {
+    /// Update the hex values here to tweak the SAFE/UNSAFE/UNKNOWN badge colours.
+    static let safe = ProcessSafetyBadgeStyle(
+        textHex: "#066D16",
+        backgroundHex: "#BFF2C7",
+        backgroundAlphaOverride: 1,
+        fallbackText: NSColor.systemGreen,
+        fallbackBackground: NSColor.systemGreen.withAlphaComponent(0.25)
+    )
+
+    static let unsafe = ProcessSafetyBadgeStyle(
+        textHex: "#C50A00",
+        backgroundHex: "#F9D7D6",
+        backgroundAlphaOverride: 0.25,
+        fallbackText: NSColor.systemRed,
+        fallbackBackground: NSColor.systemRed.withAlphaComponent(0.25)
+    )
+
+    static let unknown = ProcessSafetyBadgeStyle(
+        textHex: "#363636",
+        backgroundHex: "#D5D5D5",
+        backgroundAlphaOverride: 1,
+        fallbackText: NSColor.labelColor,
+        fallbackBackground: NSColor.systemGray.withAlphaComponent(0.25)
+    )
+}
+
 struct VolumeProcessInfo {
     let volume: Volume
     let process: ProcessInfo
@@ -23,22 +66,22 @@ private extension ProcessSafety {
     var backgroundColor: NSColor {
         switch self {
         case .safe:
-            return NSColor.systemGreen.withAlphaComponent(0.25)
+            return ProcessSafetyBadgePalette.safe.backgroundColor
         case .unsafe:
-            return NSColor.systemRed.withAlphaComponent(0.25)
+            return ProcessSafetyBadgePalette.unsafe.backgroundColor
         case .unknown:
-            return NSColor.systemGray.withAlphaComponent(0.25)
+            return ProcessSafetyBadgePalette.unknown.backgroundColor
         }
     }
 
     var textColor: NSColor {
         switch self {
         case .safe:
-            return NSColor.systemGreen
+            return ProcessSafetyBadgePalette.safe.textColor
         case .unsafe:
-            return NSColor.systemRed
+            return ProcessSafetyBadgePalette.unsafe.textColor
         case .unknown:
-            return NSColor.labelColor
+            return ProcessSafetyBadgePalette.unknown.textColor
         }
     }
 }
