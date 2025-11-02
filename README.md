@@ -51,8 +51,3 @@ This script compiles the Swift sources, assembles an app bundle under `build/`, 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Apple's Cocoa framework
-- The Swift programming language
