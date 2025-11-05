@@ -44,6 +44,20 @@ final class RulesViewController: NSViewController {
         tableView.deselectAll(nil)
         updateRemoveButtonState()
     }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        guard let window = view.window, let screen = window.screen else { return }
+
+        var frame = window.frame
+        frame.size.height = 300
+
+        // Center horizontally in the screen
+        let screenFrame = screen.visibleFrame
+        frame.origin.x = screenFrame.origin.x + (screenFrame.width - frame.width) / 2
+
+        window.setFrame(frame, display: true, animate: false)
+    }
 }
 
 extension RulesViewController: NSTableViewDataSource, NSTableViewDelegate {
