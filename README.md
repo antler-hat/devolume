@@ -2,6 +2,12 @@
 
 Ejector is a macOS utility that helps you safely remove external drives. It automatically ejects any drives that are ready to go and highlights the processes that still have files open so you can address them quickly.
 
+![Ejector Screenshot](docs/screenshot.png)
+
+## Download
+
+You can download the latest version of Ejector from the [Releases page](https://github.com/antler-hat/ejector/releases).
+
 ## Features
 
 - Scans every mounted external volume on launch
@@ -9,40 +15,24 @@ Ejector is a macOS utility that helps you safely remove external drives. It auto
 - Aggregates all blocking processes in a single table with drive context
 - Lets you terminate selected processes and retries the ejection flow
 
-## Requirements
+## How It Works
 
-- macOS 10.13 or later
-- Administrator privileges (for terminating processes)
+When you open Ejector, it automatically scans all connected external drives:
+- Drives that are safe to remove are ejected immediately.
+- Drives still in use show up in a list with the apps or processes using them.
+- You can choose which processes to end, and Ejector will retry the ejection automatically.
 
-## Installation
+## Why Ejector?
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/ejector.git
-   cd ejector
-   ```
-
-2. Build the application:
-   ```
-   chmod +x build.sh
-   ./build.sh
-   ```
-
-3. The application will be installed to `~/Applications/Ejector.app`
-
-## Usage
-
-1. Launch Ejector from your Applications folder.
-2. The app will immediately scan and eject any external drives that are safe to remove.
-3. If some drives are still in use, you'll see a single list of the blocking processes along with the volume each one is using.
-4. Leave the processes you want to terminate selected and click **End processes**.
-5. When all blocking processes are gone, Ejector automatically retries the ejection and confirms when every selected drive is safe to unplug.
+Manually ejecting drives can be frustrating when macOS says “The disk wasn’t ejected because one or more programs may be using it.”  
+Ejector solves this by showing you exactly which processes are blocking your drives and letting you close them safely.
 
 ## Building from Source
 
 The application is built using Swift and the Cocoa framework. To build from source:
 
 ```bash
+chmod +x build.sh
 ./build.sh
 ```
 
