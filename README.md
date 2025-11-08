@@ -2,8 +2,6 @@
 
 Ejector is a macOS utility that helps you safely remove external drives. It automatically ejects any drives that are ready to go and highlights the processes that still have files open so you can address them quickly.
 
-![Ejector Screenshot](docs/screenshot.png)
-
 ## Download
 
 You can download the latest version of Ejector from the [Releases page](https://github.com/antler-hat/ejector/releases).
