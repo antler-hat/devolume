@@ -116,6 +116,8 @@ final class VolumeManager {
                 continue
             }
 
+            // Add a short delay before attempting eject to allow OS cleanup
+            Thread.sleep(forTimeInterval: 0.75)
             if eject(volume) {
                 successful.append(volume)
             } else {
