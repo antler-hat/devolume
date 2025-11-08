@@ -105,7 +105,7 @@ class MainViewController: NSViewController {
     private var volumeIcons: [Volume: NSImage] = [:]
 
     private let minimumPreferredHeight: CGFloat = 300
-    private let expandedPreferredHeight: CGFloat = 600
+    private let expandedPreferredHeight: CGFloat = 440
     private var aggregatedProcesses: [VolumeProcessInfo] = []
     private var selectedProcessIndexes: Set<Int> = []
 
@@ -124,6 +124,7 @@ class MainViewController: NSViewController {
     private var processScrollView: NSScrollView!
     private var processTableView: NSTableView!
     private var processSelectAllCheckbox: NSButton!
+    private var processWarningLabel: NSTextField!
     private var saveSelectionToggle: NSButton!
     private var shouldSaveSelectedProcessesAsRules = false
     private var skipRuleAutomationOnce = false
@@ -344,6 +345,18 @@ class MainViewController: NSViewController {
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(infoLabel)
 
+        processWarningLabel = NSTextField(
+            labelWithString: "Don't end any processes that are writing data")
+        processWarningLabel.font = NSFontManager.shared.convert(
+            NSFont.systemFont(ofSize: NSFont.smallSystemFontSize))
+        processWarningLabel.textColor = NSColor.secondaryLabelColor
+        processWarningLabel.alignment = .left
+        processWarningLabel.lineBreakMode = .byWordWrapping
+        processWarningLabel.maximumNumberOfLines = 0
+        processWarningLabel.translatesAutoresizingMaskIntoConstraints = false
+        processWarningLabel.isHidden = true
+        view.addSubview(processWarningLabel)
+
         emptyStateEmoji = NSTextField(labelWithString: "✅")
         emptyStateEmoji.font = NSFont.systemFont(ofSize: 30)
         emptyStateEmoji.alignment = .center
@@ -491,12 +504,16 @@ class MainViewController: NSViewController {
             infoLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
             infoLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
+            processWarningLabel.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 8),
+            processWarningLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            processWarningLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+
             volumeScrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 20),
             volumeScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             volumeScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             volumeScrollView.bottomAnchor.constraint(equalTo: ejectButton.topAnchor, constant: -20),
 
-            processScrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 20),
+            processScrollView.topAnchor.constraint(equalTo: processWarningLabel.bottomAnchor, constant: 8),
             processScrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             processScrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             processScrollView.bottomAnchor.constraint(
@@ -531,6 +548,7 @@ class MainViewController: NSViewController {
         contentState = .scanning
         infoLabel.stringValue = "Scanning external volumes..."
         infoLabel.isHidden = false
+        processWarningLabel.isHidden = true
         spinner.isHidden = false
         spinner.startAnimation(nil)
 
@@ -586,6 +604,7 @@ class MainViewController: NSViewController {
     private func showVolumeSelectionState() {
         contentState = .volumeSelection
         infoLabel.stringValue = "Select the drives to eject:"
+        processWarningLabel.isHidden = true
 
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -608,6 +627,7 @@ class MainViewController: NSViewController {
         contentState = .processResolution
         infoLabel.stringValue =
             "Processes are preventing ejection"
+        processWarningLabel.isHidden = false
 
         spinner.stopAnimation(nil)
         spinner.isHidden = true
@@ -631,6 +651,7 @@ class MainViewController: NSViewController {
         emptyStateText.stringValue = message
 
         infoLabel.isHidden = true
+        processWarningLabel.isHidden = true
         spinner.stopAnimation(nil)
         spinner.isHidden = true
         volumeScrollView.isHidden = true
@@ -648,6 +669,7 @@ class MainViewController: NSViewController {
     private func showProgressState(message: String) {
         infoLabel.stringValue = message
         infoLabel.isHidden = false
+        processWarningLabel.isHidden = true
         spinner.isHidden = false
         spinner.startAnimation(nil)
 
