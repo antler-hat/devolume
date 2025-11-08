@@ -13,6 +13,12 @@ struct VolumeEjectResult {
 final class VolumeManager {
     private let fileManager: FileManager
 
+    private enum EjectAttemptOutcome {
+        case success
+        case blocked([ProcessInfo])
+        case failed
+    }
+
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
@@ -116,11 +122,16 @@ final class VolumeManager {
                 continue
             }
 
-            // Add a short delay before attempting eject to allow OS cleanup
-            Thread.sleep(forTimeInterval: 0.75)
-            if eject(volume) {
+            switch ejectVolumeWithRetry(volume) {
+            case .success:
                 successful.append(volume)
-            } else {
+            case .blocked(let processes):
+                if !processes.isEmpty {
+                    blocking[volume] = processes
+                } else {
+                    failedWithoutProcesses.append(volume)
+                }
+            case .failed:
                 failedWithoutProcesses.append(volume)
             }
         }
@@ -193,5 +204,37 @@ final class VolumeManager {
         }
 
         return busProtocol.range(of: "USB", options: .caseInsensitive) != nil
+    }
+
+    private func ejectVolumeWithRetry(
+        _ volume: Volume,
+        maxAttempts: Int = 4,
+        initialDelay: TimeInterval = 0.4,
+        delayMultiplier: Double = 1.5,
+        maxDelay: TimeInterval = 2.0
+    ) -> EjectAttemptOutcome {
+        var attempt = 0
+        var delay = initialDelay
+
+        while attempt < maxAttempts {
+            if eject(volume) {
+                return .success
+            }
+
+            let processes = findProcessesUsingVolume(volume)
+            if !processes.isEmpty {
+                return .blocked(processes)
+            }
+
+            attempt += 1
+            guard attempt < maxAttempts else {
+                break
+            }
+
+            Thread.sleep(forTimeInterval: delay)
+            delay = min(delay * delayMultiplier, maxDelay)
+        }
+
+        return .failed
     }
 }
