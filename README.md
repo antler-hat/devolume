@@ -10,7 +10,7 @@ You can download the latest version of Ejector from the [Releases page](https://
 
 - Scans every mounted external volume on launch
 - Automatically ejects drives with no blocking processes
-- Aggregates all blocking processes in a single table with drive context
+- Shows a checklist of all blocking processes in a single table with drive context
 - Lets you terminate selected processes and retries the ejection flow
 
 ## How It Works
