@@ -114,7 +114,7 @@ class MainViewController: NSViewController {
 
     private var infoLabel: NSTextField!
     private var spinner: NSProgressIndicator!
-    private var emptyStateEmoji: NSTextField!
+    private var emptyStateIcon: NSImageView!
     private var emptyStateText: NSTextField!
 
     private var volumeScrollView: NSScrollView!
@@ -357,15 +357,15 @@ class MainViewController: NSViewController {
         processWarningLabel.isHidden = true
         view.addSubview(processWarningLabel)
 
-        emptyStateEmoji = NSTextField(labelWithString: "✅")
-        emptyStateEmoji.font = NSFont.systemFont(ofSize: 30)
-        emptyStateEmoji.alignment = .center
-        emptyStateEmoji.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateEmoji.isHidden = true
-        view.addSubview(emptyStateEmoji)
+        emptyStateIcon = NSImageView()
+        emptyStateIcon.contentTintColor = .systemGreen
+        emptyStateIcon.imageScaling = .scaleProportionallyDown
+        emptyStateIcon.translatesAutoresizingMaskIntoConstraints = false
+        emptyStateIcon.isHidden = true
+        view.addSubview(emptyStateIcon)
 
         emptyStateText = NSTextField(labelWithString: "")
-        emptyStateText.font = NSFont.systemFont(ofSize: 18)
+        emptyStateText.font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         emptyStateText.alignment = .center
         emptyStateText.translatesAutoresizingMaskIntoConstraints = false
         emptyStateText.isHidden = true
@@ -533,11 +533,11 @@ class MainViewController: NSViewController {
             closeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             closeButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
 
-            emptyStateEmoji.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyStateEmoji.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
+            emptyStateIcon.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyStateIcon.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
 
             emptyStateText.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyStateText.topAnchor.constraint(equalTo: emptyStateEmoji.bottomAnchor, constant: 16),
+            emptyStateText.topAnchor.constraint(equalTo: emptyStateIcon.bottomAnchor, constant: 16),
 
             spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -557,7 +557,7 @@ class MainViewController: NSViewController {
         ejectButton.isHidden = true
         endProcessesButton.isHidden = true
         closeButton.isHidden = true
-        emptyStateEmoji.isHidden = true
+        emptyStateIcon.isHidden = true
         emptyStateText.isHidden = true
     }
 
@@ -608,7 +608,7 @@ class MainViewController: NSViewController {
 
         spinner.stopAnimation(nil)
         spinner.isHidden = true
-        emptyStateEmoji.isHidden = true
+        emptyStateIcon.isHidden = true
         emptyStateText.isHidden = true
         processScrollView.isHidden = true
         endProcessesButton.isHidden = true
@@ -633,7 +633,7 @@ class MainViewController: NSViewController {
         spinner.isHidden = true
         volumeScrollView.isHidden = true
         ejectButton.isHidden = true
-        emptyStateEmoji.isHidden = true
+        emptyStateIcon.isHidden = true
         emptyStateText.isHidden = true
         closeButton.isHidden = true
 
@@ -645,9 +645,22 @@ class MainViewController: NSViewController {
         assignDefaultButton(endProcessesButton)
     }
 
-    private func showCompletionState(message: String, emoji: String = "✅") {
+    private func showCompletionState(
+        message: String,
+        symbolName: String = "externaldrive.badge.checkmark"
+    ) {
         contentState = .completion
-        emptyStateEmoji.stringValue = emoji
+        let isSuccessSymbol = symbolName == "externaldrive.badge.checkmark"
+        emptyStateIcon.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(
+            pointSize: 50,
+            weight: .thin
+        ))
+        emptyStateIcon.contentTintColor = isSuccessSymbol
+            ? .systemGreen
+            : .systemOrange
         emptyStateText.stringValue = message
 
         infoLabel.isHidden = true
@@ -660,7 +673,7 @@ class MainViewController: NSViewController {
         endProcessesButton.isHidden = true
         saveSelectionToggle.isHidden = true
 
-        emptyStateEmoji.isHidden = false
+        emptyStateIcon.isHidden = false
         emptyStateText.isHidden = false
         closeButton.isHidden = false
         assignDefaultButton(closeButton)
@@ -679,7 +692,7 @@ class MainViewController: NSViewController {
         endProcessesButton.isHidden = true
         saveSelectionToggle.isHidden = true
         closeButton.isHidden = true
-        emptyStateEmoji.isHidden = true
+        emptyStateIcon.isHidden = true
         emptyStateText.isHidden = true
         assignDefaultButton(nil)
     }
@@ -956,7 +969,7 @@ class MainViewController: NSViewController {
                     message =
                         "Unable to eject: \(joined). Close any apps using them and try again."
                 }
-                showCompletionState(message: message, emoji: "⚠️")
+                showCompletionState(message: message, symbolName: "exclamationmark.triangle.fill")
             }
             return
         }
@@ -1148,7 +1161,10 @@ class MainViewController: NSViewController {
         )
     }
 
-    func presentCompletion(message: String, emoji: String = "✅") {
+    func presentCompletion(
+        message: String,
+        symbolName: String = "externaldrive.badge.checkmark"
+    ) {
         ensureViewLoadedIfNeeded()
         allVolumes.removeAll()
         selectedVolumes.removeAll()
@@ -1163,7 +1179,7 @@ class MainViewController: NSViewController {
         volumeTableView.reloadData()
         processTableView.reloadData()
         skipRuleAutomationOnce = false
-        showCompletionState(message: message, emoji: emoji)
+        showCompletionState(message: message, symbolName: symbolName)
     }
 
     func restartScan() {
