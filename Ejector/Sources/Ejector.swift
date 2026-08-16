@@ -167,7 +167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     self.showMainWindow()
                     self.mainViewController.presentCompletion(
-                        message: "No external drives are mounted. Nothing to eject"
+                        message: "No external drives are mounted. There's nothing to eject!"
                     )
                 }
                 return
