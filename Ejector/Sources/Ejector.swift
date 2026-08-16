@@ -88,6 +88,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        let qaItem = NSMenuItem(title: "QA Mode", action: nil, keyEquivalent: "")
+        qaItem.submenu = makeQAMenu()
+        menu.addItem(qaItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let manageRulesItem = NSMenuItem(
             title: "Manage Saved Rules…",
             action: #selector(openRulesFromMenu),
@@ -160,6 +166,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func makeQAMenu() -> NSMenu {
+        let menu = NSMenu(title: "QA Mode")
+        for scenario in QAScenario.allCases {
+            let item = NSMenuItem(
+                title: scenario.title,
+                action: #selector(showQAScenario),
+                keyEquivalent: ""
+            )
+            item.tag = scenario.rawValue
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.addItem(NSMenuItem.separator())
+        let liveScanItem = NSMenuItem(
+            title: "Resume Live Scan",
+            action: #selector(resumeLiveScan),
+            keyEquivalent: ""
+        )
+        liveScanItem.target = self
+        menu.addItem(liveScanItem)
+        return menu
+    }
+
     @objc private func ejectAllVolumesFromMenu(_ sender: Any?) {
         DispatchQueue.global(qos: .userInitiated).async {
             let volumes = self.volumeManager.enumerateExternalVolumes()
@@ -196,6 +225,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if shouldRescan {
             mainViewController.restartScan()
         }
+    }
+
+    @objc private func showQAScenario(_ sender: NSMenuItem) {
+        guard let scenario = QAScenario(rawValue: sender.tag) else { return }
+        showMainWindow()
+        mainViewController.showQAScenario(scenario)
+    }
+
+    @objc private func resumeLiveScan(_ sender: Any?) {
+        showMainWindow()
+        mainViewController.restartScan()
     }
 
     @objc private func openRulesFromMenu(_ sender: Any?) {

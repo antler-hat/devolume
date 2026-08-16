@@ -51,6 +51,32 @@ struct VolumeProcessInfo {
     let descriptor: ProcessDescriptor?
 }
 
+enum QAScenario: Int, CaseIterable {
+    case scanning
+    case noVolumes
+    case driveSelection
+    case blockedProcesses
+    case ejectionFailure
+    case ejectionSuccess
+
+    var title: String {
+        switch self {
+        case .scanning:
+            return "Scanning"
+        case .noVolumes:
+            return "No External Drives"
+        case .driveSelection:
+            return "Drive Selection"
+        case .blockedProcesses:
+            return "Blocked Processes"
+        case .ejectionFailure:
+            return "Ejection Failure"
+        case .ejectionSuccess:
+            return "Ejection Success"
+        }
+    }
+}
+
 private extension ProcessSafety {
     var displayText: String {
         switch self {
@@ -98,6 +124,7 @@ class MainViewController: NSViewController {
     private let volumeManager = VolumeManager()
     private let ruleStore: ProcessRuleStore
     private var contentState: ContentState = .scanning
+    private var isQAMode = false
 
     private var allVolumes: [Volume] = []
     private var selectedVolumes: Set<Volume> = []
@@ -571,6 +598,7 @@ class MainViewController: NSViewController {
     }
 
     private func handleVolumeScanResult(_ volumes: [Volume]) {
+        guard !isQAMode else { return }
         spinner.stopAnimation(nil)
         spinner.isHidden = true
 
@@ -825,6 +853,10 @@ class MainViewController: NSViewController {
     @objc private func ejectButtonClicked() {
         let volumesToEject = allVolumes.filter { selectedVolumes.contains($0) }
         guard !volumesToEject.isEmpty else { return }
+        if isQAMode {
+            showQABlockedProcesses()
+            return
+        }
         attemptEject(volumes: volumesToEject)
     }
 
@@ -837,6 +869,11 @@ class MainViewController: NSViewController {
             }
 
         guard !selectedInfos.isEmpty else { return }
+
+        if isQAMode {
+            showCompletionState(message: "QA: Selected processes ended and drives ejected.")
+            return
+        }
 
         let uniqueProcessesMap = selectedInfos.reduce(into: [Int: ProcessInfo]()) { partialResult, info in
             partialResult[info.process.pid] = info.process
@@ -1144,6 +1181,8 @@ class MainViewController: NSViewController {
 
     func presentEjectionOutcome(for attemptedVolumes: [Volume], result: VolumeEjectResult) {
         ensureViewLoadedIfNeeded()
+        isQAMode = false
+        updateWindowTitle()
         let sortedVolumes = attemptedVolumes.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
@@ -1166,6 +1205,8 @@ class MainViewController: NSViewController {
         symbolName: String = "externaldrive.badge.checkmark"
     ) {
         ensureViewLoadedIfNeeded()
+        isQAMode = false
+        updateWindowTitle()
         allVolumes.removeAll()
         selectedVolumes.removeAll()
         volumesPendingEjection.removeAll()
@@ -1184,6 +1225,8 @@ class MainViewController: NSViewController {
 
     func restartScan() {
         ensureViewLoadedIfNeeded()
+        isQAMode = false
+        updateWindowTitle()
         allVolumes.removeAll()
         selectedVolumes.removeAll()
         volumesPendingEjection.removeAll()
@@ -1198,6 +1241,97 @@ class MainViewController: NSViewController {
         skipRuleAutomationOnce = false
         showScanningState()
         scanForVolumes()
+    }
+
+    func showQAScenario(_ scenario: QAScenario) {
+        ensureViewLoadedIfNeeded()
+        isQAMode = true
+        updateWindowTitle()
+
+        switch scenario {
+        case .scanning:
+            showScanningState()
+        case .noVolumes:
+            presentQACompletion(message: "No external drives are mounted. Nothing to eject")
+            contentState = .noVolumes
+        case .driveSelection:
+            showQADriveSelection()
+        case .blockedProcesses:
+            showQABlockedProcesses()
+        case .ejectionFailure:
+            presentQACompletion(
+                message: "Unable to eject ARCHIVE SSD. Close any apps using it and try again.",
+                symbolName: "exclamationmark.triangle.fill"
+            )
+        case .ejectionSuccess:
+            presentQACompletion(message: "All selected drives were ejected.")
+        }
+    }
+
+    private func showQADriveSelection() {
+        let volumes = [
+            Volume(name: "ARCHIVE SSD", path: "/Volumes/QA Archive"),
+            Volume(name: "Backup Drive", path: "/Volumes/QA Backup"),
+            Volume(name: "Camera Card", path: "/Volumes/QA Camera"),
+            Volume(name: "Field Audio", path: "/Volumes/QA Audio"),
+            Volume(name: "Project Files", path: "/Volumes/QA Projects"),
+        ]
+        allVolumes = volumes
+        selectedVolumes = Set(volumes)
+        volumesPendingEjection.removeAll()
+        volumeIcons.removeAll()
+        volumeCheckboxes.removeAll()
+        processCheckboxes.removeAll()
+        aggregatedProcesses.removeAll()
+        selectedProcessIndexes.removeAll()
+        volumeTableView.reloadData()
+        updateVolumeSelectAllState()
+        showVolumeSelectionState()
+        adjustWindowSizeIfNeeded()
+    }
+
+    private func showQABlockedProcesses() {
+        let archive = Volume(name: "ARCHIVE SSD", path: "/Volumes/QA Archive")
+        let backup = Volume(name: "Backup Drive", path: "/Volumes/QA Backup")
+        allVolumes = [archive, backup]
+        selectedVolumes = Set(allVolumes)
+        volumesPendingEjection = Set(allVolumes)
+        volumeIcons.removeAll()
+        refreshProcessList(with: [
+            archive: [
+                ProcessInfo(name: "Preview", pid: 9001),
+                ProcessInfo(name: "backupd", pid: 9002),
+                ProcessInfo(name: "unknown-tool", pid: 9003),
+            ],
+            backup: [
+                ProcessInfo(name: "mds", pid: 9004),
+                ProcessInfo(name: "rsync", pid: 9005),
+                ProcessInfo(name: "Finder", pid: 9006),
+            ],
+        ])
+    }
+
+    private func presentQACompletion(
+        message: String,
+        symbolName: String = "externaldrive.badge.checkmark"
+    ) {
+        allVolumes.removeAll()
+        selectedVolumes.removeAll()
+        volumesPendingEjection.removeAll()
+        aggregatedProcesses.removeAll()
+        selectedProcessIndexes.removeAll()
+        volumeIcons.removeAll()
+        volumeCheckboxes.removeAll()
+        processCheckboxes.removeAll()
+        shouldSaveSelectedProcessesAsRules = false
+        saveSelectionToggle.state = .off
+        volumeTableView.reloadData()
+        processTableView.reloadData()
+        showCompletionState(message: message, symbolName: symbolName)
+    }
+
+    private func updateWindowTitle() {
+        view.window?.title = isQAMode ? "Ejector — QA" : "Ejector"
     }
 
     @objc private func closeButtonClicked() {
