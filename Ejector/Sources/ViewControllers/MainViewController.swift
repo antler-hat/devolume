@@ -51,6 +51,7 @@ struct VolumeProcessInfo {
     let descriptor: ProcessDescriptor?
 }
 
+#if QA_MODE
 enum QAScenario: Int, CaseIterable {
     case scanning
     case noVolumes
@@ -76,6 +77,7 @@ enum QAScenario: Int, CaseIterable {
         }
     }
 }
+#endif
 
 private extension ProcessSafety {
     var displayText: String {
@@ -124,7 +126,9 @@ class MainViewController: NSViewController {
     private let volumeManager = VolumeManager()
     private let ruleStore: ProcessRuleStore
     private var contentState: ContentState = .scanning
+#if QA_MODE
     private var isQAMode = false
+#endif
 
     private var allVolumes: [Volume] = []
     private var selectedVolumes: Set<Volume> = []
@@ -615,7 +619,9 @@ class MainViewController: NSViewController {
     }
 
     private func handleVolumeScanResult(_ volumes: [Volume]) {
+#if QA_MODE
         guard !isQAMode else { return }
+#endif
         spinner.stopAnimation(nil)
         spinner.isHidden = true
 
@@ -876,10 +882,12 @@ class MainViewController: NSViewController {
     @objc private func ejectButtonClicked() {
         let volumesToEject = allVolumes.filter { selectedVolumes.contains($0) }
         guard !volumesToEject.isEmpty else { return }
+#if QA_MODE
         if isQAMode {
             showQABlockedProcesses()
             return
         }
+#endif
         attemptEject(volumes: volumesToEject)
     }
 
@@ -893,10 +901,12 @@ class MainViewController: NSViewController {
 
         guard !selectedInfos.isEmpty else { return }
 
+#if QA_MODE
         if isQAMode {
             showCompletionState(message: "QA: Selected processes ended and drives ejected.")
             return
         }
+#endif
 
         let uniqueProcessesMap = selectedInfos.reduce(into: [Int: ProcessInfo]()) { partialResult, info in
             partialResult[info.process.pid] = info.process
@@ -1204,8 +1214,10 @@ class MainViewController: NSViewController {
 
     func presentEjectionOutcome(for attemptedVolumes: [Volume], result: VolumeEjectResult) {
         ensureViewLoadedIfNeeded()
+#if QA_MODE
         isQAMode = false
         updateWindowTitle()
+#endif
         let sortedVolumes = attemptedVolumes.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
@@ -1228,8 +1240,10 @@ class MainViewController: NSViewController {
         symbolName: String = "externaldrive.badge.checkmark"
     ) {
         ensureViewLoadedIfNeeded()
+#if QA_MODE
         isQAMode = false
         updateWindowTitle()
+#endif
         allVolumes.removeAll()
         selectedVolumes.removeAll()
         volumesPendingEjection.removeAll()
@@ -1248,8 +1262,10 @@ class MainViewController: NSViewController {
 
     func restartScan() {
         ensureViewLoadedIfNeeded()
+#if QA_MODE
         isQAMode = false
         updateWindowTitle()
+#endif
         allVolumes.removeAll()
         selectedVolumes.removeAll()
         volumesPendingEjection.removeAll()
@@ -1266,6 +1282,7 @@ class MainViewController: NSViewController {
         scanForVolumes()
     }
 
+#if QA_MODE
     func showQAScenario(_ scenario: QAScenario) {
         ensureViewLoadedIfNeeded()
         isQAMode = true
@@ -1356,6 +1373,7 @@ class MainViewController: NSViewController {
     private func updateWindowTitle() {
         view.window?.title = isQAMode ? "Ejector — QA" : "Ejector"
     }
+#endif
 
     @objc private func closeButtonClicked() {
         view.window?.close()

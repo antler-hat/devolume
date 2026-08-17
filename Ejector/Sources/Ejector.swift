@@ -88,11 +88,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+#if QA_MODE
         let qaItem = NSMenuItem(title: "QA Mode", action: nil, keyEquivalent: "")
         qaItem.submenu = makeQAMenu()
         menu.addItem(qaItem)
 
         menu.addItem(NSMenuItem.separator())
+#endif
 
         let manageRulesItem = NSMenuItem(
             title: "Manage Saved Rules…",
@@ -166,6 +168,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+#if QA_MODE
     private func makeQAMenu() -> NSMenu {
         let menu = NSMenu(title: "QA Mode")
         for scenario in QAScenario.allCases {
@@ -188,6 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(liveScanItem)
         return menu
     }
+#endif
 
     @objc private func ejectAllVolumesFromMenu(_ sender: Any?) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -227,6 +231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+#if QA_MODE
     @objc private func showQAScenario(_ sender: NSMenuItem) {
         guard let scenario = QAScenario(rawValue: sender.tag) else { return }
         showMainWindow()
@@ -237,6 +242,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         showMainWindow()
         mainViewController.restartScan()
     }
+#endif
 
     @objc private func openRulesFromMenu(_ sender: Any?) {
         if rulesWindowController == nil {

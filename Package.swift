@@ -19,6 +19,9 @@ let package = Package(
             sources: ["Sources"],
             resources: [
                 .copy("Resources")
+            ],
+            swiftSettings: [
+                .define("QA_MODE", .when(configuration: .debug))
             ]
         )
     ]
