@@ -162,6 +162,7 @@ class MainViewController: NSViewController {
     private var skipRuleAutomationOnce = false
 
     private var ejectButton: NSButton!
+    private var retryEjectingButton: NSButton!
     private var endProcessesButton: NSButton!
     private var closeButton: NSButton!
 
@@ -531,6 +532,13 @@ class MainViewController: NSViewController {
         ejectButton.isHidden = true
         view.addSubview(ejectButton)
 
+        retryEjectingButton = NSButton(
+            title: "Retry ejecting", target: self, action: #selector(retryEjectingButtonClicked))
+        retryEjectingButton.translatesAutoresizingMaskIntoConstraints = false
+        retryEjectingButton.bezelStyle = .rounded
+        retryEjectingButton.isHidden = true
+        view.addSubview(retryEjectingButton)
+
         endProcessesButton = NSButton(
             title: "End processes", target: self, action: #selector(endProcessesButtonClicked))
         endProcessesButton.translatesAutoresizingMaskIntoConstraints = false
@@ -574,7 +582,11 @@ class MainViewController: NSViewController {
             saveSelectionToggle.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             saveSelectionToggle.centerYAnchor.constraint(equalTo: endProcessesButton.centerYAnchor),
             saveSelectionToggle.trailingAnchor.constraint(
-                lessThanOrEqualTo: endProcessesButton.leadingAnchor, constant: -12),
+                lessThanOrEqualTo: retryEjectingButton.leadingAnchor, constant: -12),
+
+            retryEjectingButton.trailingAnchor.constraint(
+                equalTo: endProcessesButton.leadingAnchor, constant: -8),
+            retryEjectingButton.centerYAnchor.constraint(equalTo: endProcessesButton.centerYAnchor),
 
             endProcessesButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             endProcessesButton.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
@@ -603,6 +615,7 @@ class MainViewController: NSViewController {
         volumeScrollView.isHidden = true
         processScrollView.isHidden = true
         ejectButton.isHidden = true
+        retryEjectingButton.isHidden = true
         endProcessesButton.isHidden = true
         closeButton.isHidden = true
         emptyStateIcon.isHidden = true
@@ -664,6 +677,7 @@ class MainViewController: NSViewController {
         emptyStateIcon.isHidden = true
         emptyStateText.isHidden = true
         processScrollView.isHidden = true
+        retryEjectingButton.isHidden = true
         endProcessesButton.isHidden = true
         closeButton.isHidden = true
 
@@ -693,6 +707,7 @@ class MainViewController: NSViewController {
         closeButton.isHidden = true
 
         processScrollView.isHidden = false
+        retryEjectingButton.isHidden = false
         endProcessesButton.isHidden = false
         saveSelectionToggle.isHidden = false
         updateSaveRuleToggleState()
@@ -726,6 +741,7 @@ class MainViewController: NSViewController {
         volumeScrollView.isHidden = true
         processScrollView.isHidden = true
         ejectButton.isHidden = true
+        retryEjectingButton.isHidden = true
         endProcessesButton.isHidden = true
         saveSelectionToggle.isHidden = true
 
@@ -746,6 +762,7 @@ class MainViewController: NSViewController {
         volumeScrollView.isHidden = true
         processScrollView.isHidden = true
         ejectButton.isHidden = true
+        retryEjectingButton.isHidden = true
         endProcessesButton.isHidden = true
         saveSelectionToggle.isHidden = true
         closeButton.isHidden = true
@@ -885,6 +902,18 @@ class MainViewController: NSViewController {
 #if QA_MODE
         if isQAMode {
             showQABlockedProcesses()
+            return
+        }
+#endif
+        attemptEject(volumes: volumesToEject)
+    }
+
+    @objc private func retryEjectingButtonClicked() {
+        let volumesToEject = Array(volumesPendingEjection)
+        guard !volumesToEject.isEmpty else { return }
+#if QA_MODE
+        if isQAMode {
+            showCompletionState(message: "QA: Drives were ejected after retrying.")
             return
         }
 #endif
